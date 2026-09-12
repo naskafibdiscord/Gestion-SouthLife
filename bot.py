@@ -11,6 +11,7 @@ TICKET_CHANNEL = "📞丨contact"
 STAFF_ROLE = "Staff"
 
 intents = discord.Intents.default()
+intents.members = True
 
 bot = commands.Bot(
     command_prefix="!",
