@@ -5,7 +5,7 @@ from discord import app_commands
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
-# Noms utilisés sur ton serveur
+# Configuration
 TICKET_CATEGORY = "🎫-tickets"
 TICKET_CHANNEL = "📞丨contact"
 STAFF_ROLE = "Staff"
@@ -17,6 +17,10 @@ bot = commands.Bot(
     intents=intents
 )
 
+
+# =========================
+# BOUTON OUVRIR UN TICKET
+# =========================
 
 class TicketView(discord.ui.View):
     def __init__(self):
@@ -59,11 +63,12 @@ class TicketView(discord.ui.View):
             )
             return
 
-        # Permissions du nouveau salon
+        # Permissions du ticket
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(
                 view_channel=False
             ),
+
             member: discord.PermissionOverwrite(
                 view_channel=True,
                 send_messages=True,
@@ -72,7 +77,7 @@ class TicketView(discord.ui.View):
             )
         }
 
-        # Ajouter le rôle Staff s'il existe
+        # Rôle Staff
         staff_role = discord.utils.get(
             guild.roles,
             name=STAFF_ROLE
@@ -93,6 +98,7 @@ class TicketView(discord.ui.View):
             topic=f"ticket:{member.id}"
         )
 
+        # Message dans le ticket
         embed = discord.Embed(
             title="🎫 Ticket ouvert",
             description=(
@@ -117,6 +123,10 @@ class TicketView(discord.ui.View):
         )
 
 
+# =========================
+# BOUTON FERMER UN TICKET
+# =========================
+
 class CloseTicketView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -136,24 +146,35 @@ class CloseTicketView(discord.ui.View):
         channel = interaction.channel
         guild = interaction.guild
 
-        # Vérifier que c'est bien un ticket
-        if not channel.topic or not channel.topic.startswith("ticket:"):
+        # Vérifier que c'est un ticket
+        if (
+            not channel.topic
+            or not channel.topic.startswith("ticket:")
+        ):
             await interaction.response.send_message(
                 "❌ Ce salon n'est pas un ticket.",
                 ephemeral=True
             )
             return
 
-        owner_id = int(channel.topic.split(":")[1])
+        owner_id = int(
+            channel.topic.split(":")[1]
+        )
 
+        # Chercher le rôle Staff
         staff_role = discord.utils.get(
             guild.roles,
             name=STAFF_ROLE
         )
 
         is_owner = interaction.user.id == owner_id
-        is_staff = staff_role and staff_role in interaction.user.roles
 
+        is_staff = (
+            staff_role is not None
+            and staff_role in interaction.user.roles
+        )
+
+        # Vérifier les permissions
         if not is_owner and not is_staff:
             await interaction.response.send_message(
                 "❌ Tu n'as pas la permission de fermer ce ticket.",
@@ -168,59 +189,92 @@ class CloseTicketView(discord.ui.View):
         await channel.delete()
 
 
+# =========================
+# BOT PRÊT
+# =========================
+
 @bot.event
 async def on_ready():
+
     print(f"✅ Connecté en tant que {bot.user}")
 
-    # Enregistrer les boutons persistants
+    # Boutons persistants
     bot.add_view(TicketView())
     bot.add_view(CloseTicketView())
 
+    # Synchronisation des commandes
     try:
         synced = await bot.tree.sync()
-        print(f"✅ {len(synced)} commande(s) synchronisée(s)")
-    except Exception as error:
-        print(f"❌ Erreur de synchronisation : {error}")
 
+        print(
+            f"✅ {len(synced)} commande(s) synchronisée(s)"
+        )
+
+    except Exception as error:
+
+        print(
+            f"❌ Erreur de synchronisation : {error}"
+        )
+
+
+# =========================
+# COMMANDE /TICKETPANEL
+# =========================
 
 @bot.tree.command(
     name="ticketpanel",
     description="Créer le panneau pour ouvrir des tickets"
 )
-@app_commands.checks.has_permissions(administrator=True)
-async def ticketpanel(interaction: discord.Interaction):
+@app_commands.checks.has_permissions(
+    administrator=True
+)
+async def ticketpanel(
+    interaction: discord.Interaction
+):
 
+    # Chercher le salon contact
     channel = discord.utils.get(
         interaction.guild.text_channels,
         name=TICKET_CHANNEL
     )
 
     if channel is None:
+
         await interaction.response.send_message(
             f"❌ Le salon `{TICKET_CHANNEL}` n'existe pas.",
             ephemeral=True
         )
+
         return
 
+    # =========================
+    # TON MESSAGE PERSONNALISÉ
+    # =========================
+
     embed = discord.Embed(
-    title="Tickets",
-    description=(
-        'Bienvenue dans l\'onglet "besoin d\'aide" de SouthLife Rôle-Play.\n\n'
-        "Si vous avez besoin d'aide vous êtes au bon endroit ! "
-        "Cependant si votre aide ne nécessite pas forcément un ticket "
-        "Discord, faites un report en jeu et attendez un staff.\n\n"
-        "Lorsque vous créez un ticket merci d'être le plus précis possible "
-        "dans votre démarche.\n\n"
-        "Cela facilitera la compréhension du staff et la rapidité de "
-        "résolution de votre demande.\n\n"
-        "À noter que nous sommes des humains, pas des robots. Merci donc "
-        "de patienter sagement qu'un staff vous réponde "
-        "(Les pings abusifs seront sanctionnés). De plus la politesse ne "
-        "fait pas de mal, un bonjour ou un merci est bienvenu.\n\n"
-        "En espérant pouvoir régler tous vos soucis."
-    ),
-    color=discord.Color.blurple()
-)
+        title="Tickets",
+        description=(
+            'Bienvenue dans l\'onglet "besoin d\'aide" '
+            'de SouthLife Rôle-Play.\n\n'
+
+            "Si vous avez besoin d'aide vous êtes au bon endroit ! "
+            "Cependant si votre aide ne nécessite pas forcément un "
+            "ticket Discord, faites un report en jeu et attendez un staff.\n\n"
+
+            "Lorsque vous créez un ticket merci d'être le plus précis "
+            "possible dans votre démarche.\n\n"
+
+            "Cela facilitera la compréhension du staff et la rapidité "
+            "de résolution de votre demande.\n\n"
+
+            "À noter que nous sommes des humains, pas des robots. "
+            "Merci donc de patienter sagement qu'un staff vous réponde "
+            "(Les pings abusifs seront sanctionnés). "
+
+            "De plus la politesse ne fait pas de mal, "
+            "un bonjour ou un merci est bienvenu.\n\n"
+
+            "En espérant pouvoir régler tous vos soucis."
         ),
         color=discord.Color.blurple()
     )
@@ -229,6 +283,7 @@ async def ticketpanel(interaction: discord.Interaction):
         text="Système de tickets"
     )
 
+    # Envoyer le panneau
     await channel.send(
         embed=embed,
         view=TicketView()
@@ -240,22 +295,36 @@ async def ticketpanel(interaction: discord.Interaction):
     )
 
 
+# =========================
+# GESTION DES ERREURS
+# =========================
+
 @ticketpanel.error
 async def ticketpanel_error(
     interaction: discord.Interaction,
     error
 ):
 
-    if isinstance(error, app_commands.errors.MissingPermissions):
+    if isinstance(
+        error,
+        app_commands.errors.MissingPermissions
+    ):
+
         await interaction.response.send_message(
             "❌ Tu dois être administrateur pour utiliser cette commande.",
             ephemeral=True
         )
+
     else:
+
         await interaction.response.send_message(
             "❌ Une erreur est survenue.",
             ephemeral=True
         )
 
+
+# =========================
+# LANCEMENT DU BOT
+# =========================
 
 bot.run(TOKEN)
