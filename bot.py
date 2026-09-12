@@ -205,13 +205,23 @@ async def ticketpanel(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🎫 Support",
         description=(
-            "Bienvenue dans l'onglet "besoin d'aide" de SouthLife Rôle-Play.
-Si vous avez besoin d'aide vous êtes au bon endroit! Cependant si votre aide ne nécessite pas forcément un ticket discord, faites un report en jeu et attendez un staff.
-Lorsque vous créez un ticket merci d'être le plus précis possible dans votre démarche.
-Cela facilitera la compréhension du staff et la rapidité de résolution de votre demande.
-A noter que nous sommes des humains, pas des robots. Merci donc de patienter sagement qu'un staff vous réponde (Les pings abusifs seront sanctionnés). De plus la politesse ne fait pas de mal, un bonjour ou un merci est bienvenu.
-En espérant pouvoir régler tout vos soucis.
-› Cordialement L'equipe SouthLife "
+            "Bienvenue dans l'onglet "besoin d'aide" de SouthLife Rôle-Play."
+"Si vous avez besoin d'aide vous êtes au bon endroit!"
+"Cependant si votre aide ne nécessite "
+"pas forcément un ticket discord, faites "
+"un report en jeu et attendez un staff."
+"Lorsque vous créez un ticket merci d'être le plus 
+"précis possible dans votre démarche."
+"Cela facilitera la compréhension du staff et la rapidité "
+"de résolution de votre demande."
+"A noter que nous sommes des humains, pas des robots."
+"Merci donc de patienter "
+"sagement qu'un staff vous réponde "
+"(Les pings abusifs seront sanctionnés). De plus "
+"la politesse ne fait pas de mal, un bonjour "
+"ou un merci est bienvenu."
+"En espérant pouvoir régler tout vos soucis."
+"› Cordialement L'equipe SouthLife "
         ),
         color=discord.Color.blurple()
     )
