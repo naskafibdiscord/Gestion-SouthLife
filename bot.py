@@ -7,7 +7,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 
 # Noms utilisés sur ton serveur
 TICKET_CATEGORY = "🎫-tickets"
-TICKET_CHANNEL = "🎫・ouvrir-un-ticket"
+TICKET_CHANNEL = "📞丨contact"
 STAFF_ROLE = "Staff"
 
 intents = discord.Intents.default()
@@ -205,10 +205,13 @@ async def ticketpanel(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🎫 Support",
         description=(
-            "Besoin d'aide ?\n\n"
-            "Clique sur le bouton ci-dessous pour créer un ticket.\n\n"
-            "Un salon privé sera automatiquement créé "
-            "pour toi et le staff."
+            "Bienvenue dans l'onglet "besoin d'aide" de SouthLife Rôle-Play.
+Si vous avez besoin d'aide vous êtes au bon endroit! Cependant si votre aide ne nécessite pas forcément un ticket discord, faites un report en jeu et attendez un staff.
+Lorsque vous créez un ticket merci d'être le plus précis possible dans votre démarche.
+Cela facilitera la compréhension du staff et la rapidité de résolution de votre demande.
+A noter que nous sommes des humains, pas des robots. Merci donc de patienter sagement qu'un staff vous réponde (Les pings abusifs seront sanctionnés). De plus la politesse ne fait pas de mal, un bonjour ou un merci est bienvenu.
+En espérant pouvoir régler tout vos soucis.
+› Cordialement L'equipe SouthLife "
         ),
         color=discord.Color.blurple()
     )
