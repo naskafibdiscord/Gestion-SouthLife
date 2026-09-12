@@ -278,6 +278,9 @@ async def ticketpanel(
         ),
         color=discord.Color.blurple()
     )
+    embed.set_image(
+    url="https://cdn.discordapp.com/attachments/1547338843198324772/1548350157475676241/9B8AD993-6D75-476A-8C61-946178416A45.png?ex=6aa6bcf4&is=6aa56b74&hm=3bac0b652af3970707ea6272b949031c2fefb255b720fdf9f8f49f877b07fd36&"
+)
 
     embed.set_footer(
         text="Système de tickets"
