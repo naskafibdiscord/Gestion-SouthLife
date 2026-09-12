@@ -6,7 +6,7 @@ from discord import app_commands
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 # Noms utilisés sur ton serveur
-TICKET_CATEGORY = "🎫 TICKETS"
+TICKET_CATEGORY = "🔹丨tickets"
 TICKET_CHANNEL = "🎫・ouvrir-un-ticket"
 STAFF_ROLE = "Staff"
 
