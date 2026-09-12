@@ -188,8 +188,55 @@ class CloseTicketView(discord.ui.View):
         )
 
         await channel.delete()
+        
+
+# =========================
+# SYSTÈME DE BIENVENUE
+# =========================
+
+WELCOME_CHANNEL = "👋丨bienvenue"
 
 
+@bot.event
+async def on_member_join(member: discord.Member):
+
+    channel = discord.utils.get(
+        member.guild.text_channels,
+        name=WELCOME_CHANNEL
+    )
+
+    if channel is None:
+        print(
+            f"❌ Le salon {WELCOME_CHANNEL} n'existe pas."
+        )
+        return
+
+    embed = discord.Embed(
+        title="👋 Bienvenue !",
+        description=(
+            f"Bienvenue {member.mention} sur "
+            f"**SouthLife Rôle-Play** !\n\n"
+            
+            "Nous sommes heureux de t'accueillir parmi nous. "
+            "Prends le temps de lire les règles et de découvrir "
+            "le serveur.\n\n"
+            
+            "🌴 **Bon jeu à toi !**"
+        ),
+        color=discord.Color.blurple()
+    )
+
+    embed.set_thumbnail(
+        url=member.display_avatar.url
+    )
+
+    embed.set_footer(
+        text=f"Membre #{member.guild.member_count}"
+    )
+
+    await channel.send(
+        embed=embed
+    )
 # =========================
 # BOT PRÊT
 # =========================
