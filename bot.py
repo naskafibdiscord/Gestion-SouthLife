@@ -1016,7 +1016,7 @@ def create_reglement_embed():
 
     description = (
         "**Règlement des Serveurs**\n"
-        "**Discord Alya RP**\n\n"
+        "**Discord SouthLife RP**\n\n"
 
         "**1 -** Soyez respectueux avec tout le monde.\n\n"
 
@@ -1060,7 +1060,7 @@ def create_reglement_embed():
 
     if REGLEMENT_IMAGE_URL:
         embed.set_image(
-            url=REGLEMENT_IMAGE_URL
+            url=https://cdn.discordapp.com/attachments/1547338843198324772/1548644935203561552/image.jpg?ex=6aa7cf7c&is=6aa67dfc&hm=2d4be46fb29c02b579285d43946c999799addad87f615b93a3376c665857da12&
         )
 
     embed.set_footer(
