@@ -4,7 +4,6 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 
-
 # =========================================================
 # TOKEN
 # =========================================================
@@ -16,17 +15,11 @@ if not TOKEN:
         "❌ La variable DISCORD_TOKEN n'est pas configurée."
     )
 
-
 # =========================================================
 # FICHIER DE CONFIGURATION
 # =========================================================
 
 CONFIG_FILE = "config.json"
-MESSAGE_IMAGES_DIR = "message_images"
-
-
-# Créer le dossier des images s'il n'existe pas
-os.makedirs(MESSAGE_IMAGES_DIR, exist_ok=True)
 
 
 def load_config():
@@ -50,6 +43,22 @@ def save_config(data):
 
 config = load_config()
 
+# =========================================================
+# CONFIGURATION DU RÈGLEMENT
+# =========================================================
+
+# URL DE L'IMAGE DU RÈGLEMENT
+#
+# Remplace simplement l'URL ci-dessous par l'URL
+# directe de ton image.
+#
+REGLEMENT_IMAGE_URL = "https://TON-URL-IMAGE-ICI.png"
+
+# Nom du salon dans lequel le règlement sera envoyé
+REGLEMENT_CHANNEL_NAME = "📋丨règlement"
+
+# Nom du rôle donné lorsqu'un membre accepte le règlement
+REGLEMENT_ROLE_NAME = "🐬・Alya RP - Règlement"
 
 # =========================================================
 # INTENTS
@@ -60,10 +69,10 @@ intents = discord.Intents.default()
 # Nécessaire pour détecter les arrivées
 intents.members = True
 
-
 # =========================================================
 # BOT
 # =========================================================
+
 
 class MyBot(commands.Bot):
 
@@ -73,64 +82,19 @@ class MyBot(commands.Bot):
         self.add_view(TicketView())
         self.add_view(CloseTicketView())
 
+        # Bouton persistant du règlement
+        self.add_view(ReglementView())
+
 
 bot = MyBot(
     command_prefix="!",
     intents=intents
 )
 
-
-# =========================================================
-# OUTILS
-# =========================================================
-
-def split_text(text, limit=2000):
-    """
-    Découpe un texte en plusieurs morceaux sans dépasser
-    la limite Discord des messages classiques.
-    """
-
-    if len(text) <= limit:
-        return [text]
-
-    chunks = []
-
-    while len(text) > limit:
-
-        # Chercher un retour à la ligne
-        cut = text.rfind("\n", 0, limit)
-
-        # Sinon chercher un espace
-        if cut == -1:
-            cut = text.rfind(" ", 0, limit)
-
-        # Sinon couper directement
-        if cut == -1:
-            cut = limit
-
-        chunks.append(
-            text[:cut].strip()
-        )
-
-        text = text[cut:].strip()
-
-    if text:
-        chunks.append(text)
-
-    return chunks
-
-
-def is_image_attachment(attachment: discord.Attachment):
-
-    if not attachment.content_type:
-        return False
-
-    return attachment.content_type.startswith("image/")
-
-
 # =========================================================
 # SYSTÈME DE TICKETS
 # =========================================================
+
 
 class TicketView(discord.ui.View):
 
@@ -155,6 +119,10 @@ class TicketView(discord.ui.View):
         if guild is None:
             return
 
+        # -------------------------------------------------
+        # Récupérer la configuration
+        # -------------------------------------------------
+
         guild_config = config.get(
             str(guild.id),
             {}
@@ -168,6 +136,10 @@ class TicketView(discord.ui.View):
             "ticket_staff_role"
         )
 
+        # -------------------------------------------------
+        # Vérifier la configuration
+        # -------------------------------------------------
+
         if not category_id:
 
             await interaction.response.send_message(
@@ -178,6 +150,10 @@ class TicketView(discord.ui.View):
             )
 
             return
+
+        # -------------------------------------------------
+        # Récupérer la catégorie
+        # -------------------------------------------------
 
         category = guild.get_channel(
             category_id
@@ -193,7 +169,10 @@ class TicketView(discord.ui.View):
 
             return
 
-        # Vérifier si l'utilisateur possède déjà un ticket
+        # -------------------------------------------------
+        # Vérifier si l'utilisateur a déjà un ticket
+        # -------------------------------------------------
+
         for channel in guild.text_channels:
 
             if channel.topic == f"ticket:{member.id}":
@@ -205,7 +184,10 @@ class TicketView(discord.ui.View):
 
                 return
 
+        # -------------------------------------------------
         # Permissions
+        # -------------------------------------------------
+
         overwrites = {
 
             guild.default_role:
@@ -222,7 +204,10 @@ class TicketView(discord.ui.View):
                 )
         }
 
-        # Rôle staff
+        # -------------------------------------------------
+        # Rôle Staff
+        # -------------------------------------------------
+
         staff_role = None
 
         if staff_role_id:
@@ -242,7 +227,10 @@ class TicketView(discord.ui.View):
                     )
                 )
 
+        # -------------------------------------------------
         # Créer le ticket
+        # -------------------------------------------------
+
         channel = await guild.create_text_channel(
 
             name=f"ticket-{member.name}",
@@ -254,7 +242,10 @@ class TicketView(discord.ui.View):
             topic=f"ticket:{member.id}"
         )
 
+        # -------------------------------------------------
         # Embed du ticket
+        # -------------------------------------------------
+
         embed = discord.Embed(
 
             title="🎫 Ticket ouvert",
@@ -293,21 +284,28 @@ class TicketView(discord.ui.View):
 # FERMER UN TICKET
 # =========================================================
 
+
 class CloseTicketView(discord.ui.View):
 
     def __init__(self):
         super().__init__(timeout=None)
 
     @discord.ui.button(
+
         label="Fermer le ticket",
+
         emoji="🔒",
+
         style=discord.ButtonStyle.red,
+
         custom_id="close_ticket"
     )
     async def close_ticket(
 
         self,
+
         interaction: discord.Interaction,
+
         button: discord.ui.Button
     ):
 
@@ -317,17 +315,27 @@ class CloseTicketView(discord.ui.View):
         if channel is None or guild is None:
             return
 
+        # -------------------------------------------------
+        # Vérifier que c'est un ticket
+        # -------------------------------------------------
+
         if (
             not channel.topic
             or not channel.topic.startswith("ticket:")
         ):
 
             await interaction.response.send_message(
+
                 "❌ Ce salon n'est pas un ticket.",
+
                 ephemeral=True
             )
 
             return
+
+        # -------------------------------------------------
+        # Récupérer le propriétaire
+        # -------------------------------------------------
 
         try:
 
@@ -338,19 +346,28 @@ class CloseTicketView(discord.ui.View):
         except (ValueError, IndexError):
 
             await interaction.response.send_message(
+
                 "❌ Impossible de déterminer "
                 "le propriétaire du ticket.",
+
                 ephemeral=True
             )
 
             return
 
+        # -------------------------------------------------
+        # Récupérer le rôle Staff
+        # -------------------------------------------------
+
         guild_config = config.get(
+
             str(guild.id),
+
             {}
         )
 
         staff_role_id = guild_config.get(
+
             "ticket_staff_role"
         )
 
@@ -361,6 +378,10 @@ class CloseTicketView(discord.ui.View):
             staff_role = guild.get_role(
                 staff_role_id
             )
+
+        # -------------------------------------------------
+        # Vérifier les permissions
+        # -------------------------------------------------
 
         is_owner = (
             interaction.user.id == owner_id
@@ -374,14 +395,21 @@ class CloseTicketView(discord.ui.View):
         if not is_owner and not is_staff:
 
             await interaction.response.send_message(
+
                 "❌ Tu n'as pas la permission "
                 "de fermer ce ticket.",
+
                 ephemeral=True
             )
 
             return
 
+        # -------------------------------------------------
+        # Fermer
+        # -------------------------------------------------
+
         await interaction.response.send_message(
+
             "🔒 Le ticket va être fermé..."
         )
 
@@ -391,6 +419,7 @@ class CloseTicketView(discord.ui.View):
 # =========================================================
 # CONFIGURATION DES TICKETS
 # =========================================================
+
 
 class TicketConfigView(discord.ui.View):
 
@@ -419,18 +448,31 @@ class TicketConfigView(discord.ui.View):
         )
 
 
-class TicketCategorySelect(discord.ui.ChannelSelect):
+# =========================================================
+# SÉLECTION CATÉGORIE
+# =========================================================
+
+
+class TicketCategorySelect(
+    discord.ui.ChannelSelect
+):
 
     def __init__(self, parent_view):
 
         self.parent_view = parent_view
 
         super().__init__(
-            placeholder="📁 Choisir la catégorie des tickets",
+
+            placeholder=(
+                "📁 Choisir la catégorie des tickets"
+            ),
+
             channel_types=[
                 discord.ChannelType.category
             ],
+
             min_values=1,
+
             max_values=1
         )
 
@@ -444,24 +486,39 @@ class TicketCategorySelect(discord.ui.ChannelSelect):
         )
 
         await interaction.response.send_message(
+
             f"📁 Catégorie sélectionnée : "
             f"**{self.values[0].name}**",
+
             ephemeral=True
         )
 
 
-class TicketChannelSelect(discord.ui.ChannelSelect):
+# =========================================================
+# SÉLECTION SALON DU PANEL
+# =========================================================
+
+
+class TicketChannelSelect(
+    discord.ui.ChannelSelect
+):
 
     def __init__(self, parent_view):
 
         self.parent_view = parent_view
 
         super().__init__(
-            placeholder="📞 Choisir le salon du panneau",
+
+            placeholder=(
+                "📞 Choisir le salon du panneau"
+            ),
+
             channel_types=[
                 discord.ChannelType.text
             ],
+
             min_values=1,
+
             max_values=1
         )
 
@@ -475,21 +532,35 @@ class TicketChannelSelect(discord.ui.ChannelSelect):
         )
 
         await interaction.response.send_message(
+
             f"📞 Salon sélectionné : "
             f"{self.values[0].mention}",
+
             ephemeral=True
         )
 
 
-class TicketStaffRoleSelect(discord.ui.RoleSelect):
+# =========================================================
+# SÉLECTION RÔLE STAFF
+# =========================================================
+
+
+class TicketStaffRoleSelect(
+    discord.ui.RoleSelect
+):
 
     def __init__(self, parent_view):
 
         self.parent_view = parent_view
 
         super().__init__(
-            placeholder="👮 Choisir le rôle du staff",
+
+            placeholder=(
+                "👮 Choisir le rôle du staff"
+            ),
+
             min_values=1,
+
             max_values=1
         )
 
@@ -503,21 +574,33 @@ class TicketStaffRoleSelect(discord.ui.RoleSelect):
         )
 
         await interaction.response.send_message(
+
             f"👮 Rôle sélectionné : "
             f"{self.values[0].mention}",
+
             ephemeral=True
         )
 
 
-class SaveTicketConfigButton(discord.ui.Button):
+# =========================================================
+# BOUTON ENREGISTRER
+# =========================================================
+
+
+class SaveTicketConfigButton(
+    discord.ui.Button
+):
 
     def __init__(self, parent_view):
 
         self.parent_view = parent_view
 
         super().__init__(
+
             label="Enregistrer",
+
             emoji="💾",
+
             style=discord.ButtonStyle.green
         )
 
@@ -531,7 +614,9 @@ class SaveTicketConfigButton(discord.ui.Button):
         if view.category_id is None:
 
             await interaction.response.send_message(
+
                 "❌ Tu dois choisir une catégorie.",
+
                 ephemeral=True
             )
 
@@ -540,7 +625,9 @@ class SaveTicketConfigButton(discord.ui.Button):
         if view.channel_id is None:
 
             await interaction.response.send_message(
+
                 "❌ Tu dois choisir le salon du panneau.",
+
                 ephemeral=True
             )
 
@@ -549,7 +636,9 @@ class SaveTicketConfigButton(discord.ui.Button):
         if view.staff_role_id is None:
 
             await interaction.response.send_message(
+
                 "❌ Tu dois choisir le rôle du staff.",
+
                 ephemeral=True
             )
 
@@ -560,6 +649,7 @@ class SaveTicketConfigButton(discord.ui.Button):
         )
 
         if guild_id not in config:
+
             config[guild_id] = {}
 
         config[guild_id][
@@ -581,7 +671,9 @@ class SaveTicketConfigButton(discord.ui.Button):
             "✅ **Configuration des tickets enregistrée !**\n\n"
 
             f"📁 Catégorie : <#{view.category_id}>\n"
+
             f"📞 Salon : <#{view.channel_id}>\n"
+
             f"👮 Rôle staff : <@&{view.staff_role_id}>",
 
             ephemeral=True
@@ -592,7 +684,10 @@ class SaveTicketConfigButton(discord.ui.Button):
 # CONFIGURATION BIENVENUE
 # =========================================================
 
-class WelcomeConfigView(discord.ui.View):
+
+class WelcomeConfigView(
+    discord.ui.View
+):
 
     def __init__(self):
 
@@ -603,18 +698,31 @@ class WelcomeConfigView(discord.ui.View):
         )
 
 
-class WelcomeChannelSelect(discord.ui.ChannelSelect):
+# =========================================================
+# SÉLECTION SALON BIENVENUE
+# =========================================================
+
+
+class WelcomeChannelSelect(
+    discord.ui.ChannelSelect
+):
 
     def __init__(self, parent_view):
 
         self.parent_view = parent_view
 
         super().__init__(
-            placeholder="👋 Choisir le salon de bienvenue",
+
+            placeholder=(
+                "👋 Choisir le salon de bienvenue"
+            ),
+
             channel_types=[
                 discord.ChannelType.text
             ],
+
             min_values=1,
+
             max_values=1
         )
 
@@ -630,6 +738,7 @@ class WelcomeChannelSelect(discord.ui.ChannelSelect):
         )
 
         if guild_id not in config:
+
             config[guild_id] = {}
 
         config[guild_id][
@@ -639,8 +748,10 @@ class WelcomeChannelSelect(discord.ui.ChannelSelect):
         save_config(config)
 
         await interaction.response.send_message(
+
             f"✅ Le salon de bienvenue est maintenant "
             f"{channel.mention}.",
+
             ephemeral=True
         )
 
@@ -649,20 +760,33 @@ class WelcomeChannelSelect(discord.ui.ChannelSelect):
 # MENU /CONFIG
 # =========================================================
 
-class ConfigView(discord.ui.View):
+
+class ConfigView(
+    discord.ui.View
+):
 
     def __init__(self):
 
         super().__init__(timeout=300)
 
+    # -----------------------------------------------------
+    # BIENVENUE
+    # -----------------------------------------------------
+
     @discord.ui.button(
+
         label="Bienvenue",
+
         emoji="👋",
+
         style=discord.ButtonStyle.primary
     )
     async def welcome_config(
+
         self,
+
         interaction: discord.Interaction,
+
         button: discord.ui.Button
     ):
 
@@ -671,6 +795,7 @@ class ConfigView(discord.ui.View):
             title="👋 Configuration du bienvenue",
 
             description=(
+
                 "Configure ici ton système de bienvenue.\n\n"
 
                 "Sélectionne le salon dans lequel "
@@ -681,19 +806,32 @@ class ConfigView(discord.ui.View):
         )
 
         await interaction.response.send_message(
+
             embed=embed,
+
             view=WelcomeConfigView(),
+
             ephemeral=True
         )
 
+    # -----------------------------------------------------
+    # TICKETS
+    # -----------------------------------------------------
+
     @discord.ui.button(
+
         label="Tickets",
+
         emoji="🎫",
+
         style=discord.ButtonStyle.secondary
     )
     async def tickets_config(
+
         self,
+
         interaction: discord.Interaction,
+
         button: discord.ui.Button
     ):
 
@@ -702,6 +840,7 @@ class ConfigView(discord.ui.View):
             title="🎫 Configuration des tickets",
 
             description=(
+
                 "Configure ici ton système de tickets.\n\n"
 
                 "📁 **Catégorie**\n"
@@ -722,641 +861,228 @@ class ConfigView(discord.ui.View):
         )
 
         await interaction.response.send_message(
+
             embed=embed,
+
             view=TicketConfigView(),
+
             ephemeral=True
         )
 
 
 # =========================================================
-# NOUVEAU : CONFIGURATION DES MESSAGES
+# SYSTÈME DE RÈGLEMENT
 # =========================================================
 
-class MessageConfigView(discord.ui.View):
 
-    def __init__(self, guild_id):
+class ReglementView(discord.ui.View):
 
-        super().__init__(timeout=600)
+    def __init__(self):
+        super().__init__(timeout=None)
 
-        self.guild_id = guild_id
-
-        guild_config = config.get(
-            str(guild_id),
-            {}
-        )
-
-        self.channel_id = guild_config.get(
-            "message_channel"
-        )
-
-        self.message_text = guild_config.get(
-            "message_text",
-            ""
-        )
-
-        self.image_path = guild_config.get(
-            "message_image"
-        )
-
-        self.add_item(
-            MessageChannelSelect(self)
-        )
-
-    def get_embed(self):
-
-        text = self.message_text
-
-        if not text:
-            text = "Aucun texte configuré."
-
-        # Discord embed description max 4096
-        description = text[:4096]
-
-        embed = discord.Embed(
-            description=description,
-            color=discord.Color.blurple()
-        )
-
-        if self.image_path:
-
-            if os.path.exists(
-                self.image_path
-            ):
-
-                filename = os.path.basename(
-                    self.image_path
-                )
-
-                embed.set_image(
-                    url=f"attachment://{filename}"
-                )
-
-        return embed
-
-
-# =========================================================
-# SÉLECTION DU SALON DU MESSAGE
-# =========================================================
-
-class MessageChannelSelect(
-    discord.ui.ChannelSelect
-):
-
-    def __init__(self, parent_view):
-
-        self.parent_view = parent_view
-
-        super().__init__(
-            placeholder="📢 Choisir le salon du message",
-            channel_types=[
-                discord.ChannelType.text
-            ],
-            min_values=1,
-            max_values=1
-        )
-
-    async def callback(
+    @discord.ui.button(
+        label="J'accepte le règlement",
+        emoji="✅",
+        style=discord.ButtonStyle.green,
+        custom_id="accept_reglement"
+    )
+    async def accept_reglement(
         self,
-        interaction: discord.Interaction
+        interaction: discord.Interaction,
+        button: discord.ui.Button
     ):
 
-        self.parent_view.channel_id = (
-            self.values[0].id
+        guild = interaction.guild
+        member = interaction.user
+
+        if guild is None:
+            return
+
+        # -------------------------------------------------
+        # Récupérer le rôle
+        # -------------------------------------------------
+
+        role = discord.utils.get(
+            guild.roles,
+            name=REGLEMENT_ROLE_NAME
         )
 
-        await interaction.response.edit_message(
-            embed=self.parent_view.get_embed(),
-            view=self.parent_view
-        )
+        if role is None:
 
-        await interaction.followup.send(
-            f"📢 Salon sélectionné : "
-            f"{self.values[0].mention}",
-            ephemeral=True
-        )
-
-
-# =========================================================
-# MODAL TEXTE + IMAGE
-# =========================================================
-
-class MessageContentModal(discord.ui.Modal):
-
-    def __init__(self, parent_view):
-
-        super().__init__(
-            title="📝 Configurer le message"
-        )
-
-        self.parent_view = parent_view
-
-        self.text_input = discord.ui.TextInput(
-            label="Texte du message",
-            placeholder="Écris ici le message à envoyer...",
-            style=discord.TextStyle.paragraph,
-            required=False,
-            max_length=4000,
-            default=parent_view.message_text[:4000]
-        )
-
-        self.image_upload = discord.ui.FileUpload(
-            custom_id="message_image_upload",
-            required=False,
-            min_values=0,
-            max_values=1
-        )
-
-        self.add_item(
-            self.text_input
-        )
-
-        self.add_item(
-            self.image_upload
-        )
-
-    async def on_submit(
-        self,
-        interaction: discord.Interaction
-    ):
-
-        self.parent_view.message_text = (
-            self.text_input.value
-        )
-
-        # Vérifier l'image
-        if self.image_upload.values:
-
-            attachment = (
-                self.image_upload.values[0]
+            await interaction.response.send_message(
+                "❌ Le rôle "
+                f"**{REGLEMENT_ROLE_NAME}** "
+                "n'existe pas sur le serveur.\n\n"
+                "Un administrateur doit créer ce rôle.",
+                ephemeral=True
             )
 
-            if not is_image_attachment(
-                attachment
-            ):
+            return
 
-                await interaction.response.send_message(
-                    "❌ Le fichier sélectionné n'est "
-                    "pas une image.",
-                    ephemeral=True
-                )
+        # -------------------------------------------------
+        # Vérifier si le membre possède déjà le rôle
+        # -------------------------------------------------
 
-                return
+        if role in member.roles:
 
-            try:
-
-                data = await attachment.read()
-
-                extension = (
-                    os.path.splitext(
-                        attachment.filename
-                    )[1]
-                    or ".png"
-                )
-
-                guild_id = str(
-                    interaction.guild.id
-                )
-
-                filename = (
-                    f"message_{guild_id}"
-                    f"{extension}"
-                )
-
-                path = os.path.join(
-                    MESSAGE_IMAGES_DIR,
-                    filename
-                )
-
-                # Supprimer une ancienne image
-                old_path = (
-                    self.parent_view.image_path
-                )
-
-                if (
-                    old_path
-                    and old_path != path
-                    and os.path.exists(old_path)
-                ):
-
-                    try:
-                        os.remove(old_path)
-                    except OSError:
-                        pass
-
-                with open(
-                    path,
-                    "wb"
-                ) as file:
-
-                    file.write(data)
-
-                self.parent_view.image_path = path
-
-            except Exception as error:
-
-                print(
-                    f"❌ Erreur sauvegarde image : {error}"
-                )
-
-                await interaction.response.send_message(
-                    "❌ Impossible d'enregistrer l'image.",
-                    ephemeral=True
-                )
-
-                return
-
-        # Enregistrer automatiquement
-        guild_id = str(
-            interaction.guild.id
-        )
-
-        if guild_id not in config:
-            config[guild_id] = {}
-
-        config[guild_id][
-            "message_text"
-        ] = self.parent_view.message_text
-
-        config[guild_id][
-            "message_image"
-        ] = self.parent_view.image_path
-
-        if self.parent_view.channel_id:
-
-            config[guild_id][
-                "message_channel"
-            ] = self.parent_view.channel_id
-
-        save_config(config)
-
-        await interaction.response.edit_message(
-            embed=self.parent_view.get_embed(),
-            view=self.parent_view
-        )
-
-        await interaction.followup.send(
-            "✅ Le texte et l'image ont été enregistrés.",
-            ephemeral=True
-        )
-
-
-# =========================================================
-# BOUTON MODIFIER MESSAGE
-# =========================================================
-
-class EditMessageButton(
-    discord.ui.Button
-):
-
-    def __init__(self, parent_view):
-
-        self.parent_view = parent_view
-
-        super().__init__(
-            label="Modifier le message",
-            emoji="📝",
-            style=discord.ButtonStyle.primary
-        )
-
-    async def callback(
-        self,
-        interaction: discord.Interaction
-    ):
-
-        await interaction.response.send_modal(
-            MessageContentModal(
-                self.parent_view
+            await interaction.response.send_message(
+                "✅ Tu as déjà accepté le règlement.",
+                ephemeral=True
             )
-        )
 
+            return
 
-# =========================================================
-# BOUTON SUPPRIMER IMAGE
-# =========================================================
+        # -------------------------------------------------
+        # Vérifier la hiérarchie des rôles
+        # -------------------------------------------------
 
-class RemoveMessageImageButton(
-    discord.ui.Button
-):
+        if guild.me is None:
 
-    def __init__(self, parent_view):
+            await interaction.response.send_message(
+                "❌ Impossible de vérifier les permissions "
+                "du bot.",
+                ephemeral=True
+            )
 
-        self.parent_view = parent_view
+            return
 
-        super().__init__(
-            label="Supprimer l'image",
-            emoji="🗑️",
-            style=discord.ButtonStyle.danger
-        )
+        if role >= guild.me.top_role:
 
-    async def callback(
-        self,
-        interaction: discord.Interaction
-    ):
+            await interaction.response.send_message(
+                "❌ Je ne peux pas donner ce rôle.\n\n"
+                "Le rôle **"
+                f"{REGLEMENT_ROLE_NAME}"
+                "** doit être placé sous le rôle du bot "
+                "dans les paramètres du serveur.",
+                ephemeral=True
+            )
 
-        path = self.parent_view.image_path
+            return
 
-        if path and os.path.exists(path):
+        # -------------------------------------------------
+        # Donner le rôle
+        # -------------------------------------------------
 
-            try:
-                os.remove(path)
-            except OSError:
-                pass
+        try:
 
-        self.parent_view.image_path = None
+            await member.add_roles(
+                role,
+                reason="Acceptation du règlement"
+            )
 
-        guild_id = str(
-            interaction.guild.id
-        )
+        except discord.Forbidden:
 
-        if guild_id in config:
+            await interaction.response.send_message(
+                "❌ Je n'ai pas la permission de donner "
+                "ce rôle.\n\n"
+                "Vérifie que le rôle du bot est au-dessus "
+                "du rôle du règlement.",
+                ephemeral=True
+            )
 
-            config[guild_id][
-                "message_image"
-            ] = None
+            return
 
-            save_config(config)
+        except Exception as error:
 
-        await interaction.response.edit_message(
-            embed=self.parent_view.get_embed(),
-            view=self.parent_view
-        )
+            print(
+                f"❌ Erreur attribution rôle règlement : {error}"
+            )
 
-        await interaction.followup.send(
-            "🗑️ Image supprimée.",
-            ephemeral=True
-        )
+            await interaction.response.send_message(
+                "❌ Une erreur est survenue lors de "
+                "l'attribution du rôle.",
+                ephemeral=True
+            )
 
+            return
 
-# =========================================================
-# APERÇU
-# =========================================================
-
-class MessagePreviewButton(
-    discord.ui.Button
-):
-
-    def __init__(self, parent_view):
-
-        self.parent_view = parent_view
-
-        super().__init__(
-            label="Aperçu",
-            emoji="👀",
-            style=discord.ButtonStyle.secondary
-        )
-
-    async def callback(
-        self,
-        interaction: discord.Interaction
-    ):
-
-        embed = self.parent_view.get_embed()
-
-        files = []
-
-        if self.parent_view.image_path:
-
-            path = self.parent_view.image_path
-
-            if os.path.exists(path):
-
-                files.append(
-                    discord.File(
-                        path,
-                        filename=os.path.basename(path)
-                    )
-                )
+        # -------------------------------------------------
+        # Confirmation
+        # -------------------------------------------------
 
         await interaction.response.send_message(
-            content="👀 **Aperçu du message :**",
-            embed=embed,
-            files=files,
+            "✅ **Règlement accepté !**\n\n"
+            f"Le rôle {role.mention} t'a été attribué.",
             ephemeral=True
         )
 
 
 # =========================================================
-# ENVOYER LE MESSAGE
+# EMBED DU RÈGLEMENT
 # =========================================================
 
-class SendConfiguredMessageButton(
-    discord.ui.Button
-):
 
-    def __init__(self, parent_view):
+def create_reglement_embed():
 
-        self.parent_view = parent_view
+    description = (
+        "**Règlement des Serveurs**\n"
+        "**Discord Alya RP**\n\n"
 
-        super().__init__(
-            label="Envoyer",
-            emoji="📤",
-            style=discord.ButtonStyle.success
+        "**1 -** Soyez respectueux avec tout le monde.\n\n"
+
+        "**2 -** Nous respectons les conditions "
+        "d'utilisation de Discord. Vous devez avoir "
+        "13 ans ou plus pour utiliser les services Discord.\n\n"
+
+        "**3 -** Ne spammez pas de texte, d'emotes ou "
+        "d'images dans les salons textuels.\n\n"
+
+        "**4 -** N'indiquez pas de messages de type "
+        "NSFW / Pub / propos haineux dans le chat ou "
+        "dans des statuts personnalisés.\n\n"
+
+        "**5 -** Il s'agit d'un serveur francophone. "
+        "Veuillez ne pas communiquer dans d'autres langues. "
+        "C'est ainsi que nous pouvons modérer pleinement.\n\n"
+
+        "**6 -** Interdiction de ping un staff pour "
+        "n'importe quelle raison.\n\n"
+
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+
+        "Q\n"
+        "Nous respectons les **T.O.S.**\n"
+        "(*Terms of Service*) appliqués par Discord.\n\n"
+
+        "Toutes les règles ci-dessus sont passibles "
+        "de sanctions, ne venez pas vous plaindre !"
+    )
+
+    embed = discord.Embed(
+        title="📋 Règlement des Serveurs",
+        description=description,
+        color=discord.Color.blurple()
+    )
+
+    # -----------------------------------------------------
+    # IMAGE
+    # -----------------------------------------------------
+
+    if REGLEMENT_IMAGE_URL:
+        embed.set_image(
+            url=REGLEMENT_IMAGE_URL
         )
 
-    async def callback(
-        self,
-        interaction: discord.Interaction
-    ):
+    embed.set_footer(
+        text="Discord Alya RP • Merci de respecter le règlement."
+    )
 
-        view = self.parent_view
-
-        if view.channel_id is None:
-
-            await interaction.response.send_message(
-                "❌ Tu dois choisir un salon.",
-                ephemeral=True
-            )
-
-            return
-
-        if not view.message_text:
-
-            await interaction.response.send_message(
-                "❌ Tu dois écrire un message.",
-                ephemeral=True
-            )
-
-            return
-
-        channel = interaction.guild.get_channel(
-            view.channel_id
-        )
-
-        if channel is None:
-
-            await interaction.response.send_message(
-                "❌ Le salon sélectionné n'existe plus.",
-                ephemeral=True
-            )
-
-            return
-
-        await interaction.response.defer(
-            ephemeral=True
-        )
-
-        text = view.message_text
-
-        # -------------------------------------------------
-        # IMAGE
-        # -------------------------------------------------
-
-        image_file = None
-
-        if view.image_path:
-
-            if os.path.exists(
-                view.image_path
-            ):
-
-                image_file = discord.File(
-                    view.image_path,
-                    filename=os.path.basename(
-                        view.image_path
-                    )
-                )
-
-        # -------------------------------------------------
-        # TEXTE <= 4096
-        # -------------------------------------------------
-
-        if len(text) <= 4096:
-
-            embed = discord.Embed(
-                description=text,
-                color=discord.Color.blurple()
-            )
-
-            if image_file:
-
-                embed.set_image(
-                    url=(
-                        "attachment://"
-                        + os.path.basename(
-                            view.image_path
-                        )
-                    )
-                )
-
-            await channel.send(
-                embed=embed,
-                file=image_file
-            )
-
-        # -------------------------------------------------
-        # TEXTE LONG
-        # -------------------------------------------------
-
-        else:
-
-            chunks = split_text(
-                text,
-                2000
-            )
-
-            for index, chunk in enumerate(chunks):
-
-                # Mettre l'image sur le premier message
-                if index == 0:
-
-                    embed = discord.Embed(
-                        description=chunk,
-                        color=discord.Color.blurple()
-                    )
-
-                    if image_file:
-
-                        embed.set_image(
-                            url=(
-                                "attachment://"
-                                + os.path.basename(
-                                    view.image_path
-                                )
-                            )
-                        )
-
-                    await channel.send(
-                        embed=embed,
-                        file=image_file
-                    )
-
-                else:
-
-                    await channel.send(
-                        chunk
-                    )
-
-        # Sauvegarder
-        guild_id = str(
-            interaction.guild.id
-        )
-
-        if guild_id not in config:
-            config[guild_id] = {}
-
-        config[guild_id][
-            "message_channel"
-        ] = view.channel_id
-
-        config[guild_id][
-            "message_text"
-        ] = view.message_text
-
-        config[guild_id][
-            "message_image"
-        ] = view.image_path
-
-        save_config(config)
-
-        await interaction.followup.send(
-            f"✅ Message envoyé dans {channel.mention} !",
-            ephemeral=True
-        )
+    return embed
 
 
 # =========================================================
-# VIEW PRINCIPALE CONFIG MESSAGE
+# /REGLEMENT
 # =========================================================
 
-class MessageConfigButtonsView(
-    MessageConfigView
-):
-
-    def __init__(self, guild_id):
-
-        super().__init__(
-            guild_id
-        )
-
-        self.add_item(
-            EditMessageButton(self)
-        )
-
-        self.add_item(
-            MessagePreviewButton(self)
-        )
-
-        self.add_item(
-            SendConfiguredMessageButton(self)
-        )
-
-        self.add_item(
-            RemoveMessageImageButton(self)
-        )
-
-
-# =========================================================
-# /CONFIGMS
-# =========================================================
 
 @bot.tree.command(
-    name="configms",
-    description="Configurer et envoyer un message personnalisé"
+    name="reglement",
+    description="Envoyer le règlement du serveur"
 )
 @app_commands.checks.has_permissions(
     administrator=True
 )
-async def configms_command(
+async def reglement_command(
     interaction: discord.Interaction
 ):
 
@@ -1366,97 +1092,103 @@ async def configms_command(
 
         await interaction.response.send_message(
             "❌ Cette commande doit être utilisée "
-            "dans un serveur.",
+            "sur un serveur.",
             ephemeral=True
         )
 
         return
 
-    view = MessageConfigButtonsView(
-        guild.id
+    # -----------------------------------------------------
+    # Chercher le salon
+    # -----------------------------------------------------
+
+    channel = discord.utils.get(
+        guild.text_channels,
+        name=REGLEMENT_CHANNEL_NAME
     )
 
-    embed = discord.Embed(
-
-        title="📨 Configuration du message",
-
-        description=(
-            "Configure ici ton message personnalisé.\n\n"
-
-            "📢 **Salon**\n"
-            "Choisis le salon dans lequel le message "
-            "sera envoyé.\n\n"
-
-            "📝 **Message**\n"
-            "Clique sur **📝 Modifier le message** "
-            "pour écrire ton texte.\n\n"
-
-            "🖼️ **Image**\n"
-            "Dans la même fenêtre, tu peux sélectionner "
-            "une image depuis ta galerie/fichiers.\n\n"
-
-            "👀 **Aperçu**\n"
-            "Permet de voir exactement le rendu avant "
-            "de l'envoyer.\n\n"
-
-            "📤 **Envoyer**\n"
-            "Envoie définitivement le message dans "
-            "le salon sélectionné."
-        ),
-
-        color=discord.Color.blurple()
-    )
-
-    await interaction.response.send_message(
-        embed=embed,
-        view=view,
-        ephemeral=True
-    )
-
-
-@configms_command.error
-async def configms_command_error(
-    interaction: discord.Interaction,
-    error
-):
-
-    if isinstance(
-        error,
-        app_commands.errors.MissingPermissions
-    ):
+    if channel is None:
 
         await interaction.response.send_message(
-            "❌ Tu dois être administrateur "
-            "pour utiliser cette commande.",
+            "❌ Je ne trouve pas le salon "
+            f"`{REGLEMENT_CHANNEL_NAME}`.\n\n"
+            "Vérifie que le salon existe et que son nom "
+            "est exactement celui indiqué dans le code.",
             ephemeral=True
         )
 
-    else:
+        return
 
-        print(
-            f"❌ Erreur /configms : {error}"
+    # -----------------------------------------------------
+    # Créer l'embed
+    # -----------------------------------------------------
+
+    embed = create_reglement_embed()
+
+    # -----------------------------------------------------
+    # Envoyer le règlement
+    # -----------------------------------------------------
+
+    try:
+
+        await channel.send(
+            embed=embed,
+            view=ReglementView()
         )
 
-        if not interaction.response.is_done():
+    except discord.Forbidden:
 
-            await interaction.response.send_message(
-                "❌ Une erreur est survenue.",
-                ephemeral=True
-            )
+        await interaction.response.send_message(
+            "❌ Je n'ai pas la permission d'envoyer "
+            f"des messages dans {channel.mention}.",
+            ephemeral=True
+        )
+
+        return
+
+    except Exception as error:
+
+        print(
+            f"❌ Erreur envoi règlement : {error}"
+        )
+
+        await interaction.response.send_message(
+            "❌ Une erreur est survenue lors de "
+            "l'envoi du règlement.",
+            ephemeral=True
+        )
+
+        return
+
+    # -----------------------------------------------------
+    # Confirmation
+    # -----------------------------------------------------
+
+    await interaction.response.send_message(
+        f"✅ Le règlement a été envoyé dans "
+        f"{channel.mention} !",
+        ephemeral=True
+    )
 
 
 # =========================================================
 # /CONFIG
 # =========================================================
 
+
 @bot.tree.command(
+
     name="config",
-    description="Configurer les fonctionnalités du bot"
+
+    description=(
+        "Configurer les fonctionnalités du bot"
+    )
 )
 @app_commands.checks.has_permissions(
     administrator=True
 )
 async def config_command(
+
     interaction: discord.Interaction
 ):
 
@@ -1465,6 +1197,7 @@ async def config_command(
         title="⚙️ Configuration",
 
         description=(
+
             "**Bienvenue dans le panneau de "
             "configuration de SouthLife Rôle-Play.**\n\n"
 
@@ -1476,72 +1209,56 @@ async def config_command(
     )
 
     embed.add_field(
+
         name="👋 Bienvenue",
+
         value=(
             "Configure le système de bienvenue "
             "et l'attribution du rôle."
         ),
+
         inline=False
     )
 
     embed.add_field(
+
         name="🎫 Tickets",
+
         value=(
             "Configure le système de tickets."
         ),
+
         inline=False
     )
 
     await interaction.response.send_message(
+
         embed=embed,
+
         view=ConfigView(),
+
         ephemeral=True
     )
-
-
-@config_command.error
-async def config_command_error(
-    interaction: discord.Interaction,
-    error
-):
-
-    if isinstance(
-        error,
-        app_commands.errors.MissingPermissions
-    ):
-
-        await interaction.response.send_message(
-            "❌ Tu dois être administrateur "
-            "pour utiliser cette commande.",
-            ephemeral=True
-        )
-
-    else:
-
-        print(
-            f"❌ Erreur /config : {error}"
-        )
-
-        if not interaction.response.is_done():
-
-            await interaction.response.send_message(
-                "❌ Une erreur est survenue.",
-                ephemeral=True
-            )
 
 
 # =========================================================
 # /TICKETPANEL
 # =========================================================
 
+
 @bot.tree.command(
+
     name="ticketpanel",
-    description="Créer le panneau pour ouvrir des tickets"
+
+    description=(
+        "Créer le panneau pour ouvrir des tickets"
+    )
 )
 @app_commands.checks.has_permissions(
     administrator=True
 )
 async def ticketpanel(
+
     interaction: discord.Interaction
 ):
 
@@ -1555,39 +1272,61 @@ async def ticketpanel(
     )
 
     guild_config = config.get(
+
         guild_id,
+
         {}
     )
 
     channel_id = guild_config.get(
+
         "ticket_channel"
     )
+
+    # -----------------------------------------------------
+    # Vérifier la configuration
+    # -----------------------------------------------------
 
     if not channel_id:
 
         await interaction.response.send_message(
+
             "❌ Le système de tickets n'est pas configuré.\n\n"
+
             "Utilise `/config` → **🎫 Tickets** "
             "pour le configurer.",
+
             ephemeral=True
         )
 
         return
 
+    # -----------------------------------------------------
+    # Récupérer le salon
+    # -----------------------------------------------------
+
     channel = guild.get_channel(
+
         channel_id
     )
 
     if channel is None:
 
         await interaction.response.send_message(
+
             "❌ Le salon configuré n'existe plus.\n\n"
+
             "Utilise `/config` → **🎫 Tickets** "
             "pour choisir un nouveau salon.",
+
             ephemeral=True
         )
 
         return
+
+    # -----------------------------------------------------
+    # PANEL TICKETS
+    # -----------------------------------------------------
 
     embed = discord.Embed(
 
@@ -1625,6 +1364,7 @@ async def ticketpanel(
     )
 
     embed.set_footer(
+
         text=(
             "Système de tickets • "
             "SouthLife Rôle-Play"
@@ -1632,54 +1372,29 @@ async def ticketpanel(
     )
 
     await channel.send(
+
         embed=embed,
+
         view=TicketView()
     )
 
     await interaction.response.send_message(
+
         f"✅ Le panneau de tickets a été envoyé "
         f"dans {channel.mention} !",
+
         ephemeral=True
     )
-
-
-@ticketpanel.error
-async def ticketpanel_error(
-    interaction: discord.Interaction,
-    error
-):
-
-    if isinstance(
-        error,
-        app_commands.errors.MissingPermissions
-    ):
-
-        await interaction.response.send_message(
-            "❌ Tu dois être administrateur "
-            "pour utiliser cette commande.",
-            ephemeral=True
-        )
-
-    else:
-
-        print(
-            f"❌ Erreur /ticketpanel : {error}"
-        )
-
-        if not interaction.response.is_done():
-
-            await interaction.response.send_message(
-                "❌ Une erreur est survenue.",
-                ephemeral=True
-            )
 
 
 # =========================================================
 # BIENVENUE + RÔLE CIVILS
 # =========================================================
 
+
 @bot.event
 async def on_member_join(
+
     member: discord.Member
 ):
 
@@ -1690,7 +1405,9 @@ async def on_member_join(
     # -----------------------------------------------------
 
     civils_role = discord.utils.get(
+
         guild.roles,
+
         name="・Civils"
     )
 
@@ -1705,7 +1422,9 @@ async def on_member_join(
         try:
 
             await member.add_roles(
+
                 civils_role,
+
                 reason=(
                     "Attribution automatique "
                     "du rôle à l'arrivée"
@@ -1713,6 +1432,7 @@ async def on_member_join(
             )
 
             print(
+
                 f"👤 Rôle ・Civils donné à "
                 f"{member}"
             )
@@ -1720,11 +1440,13 @@ async def on_member_join(
         except discord.Forbidden:
 
             print(
+
                 "❌ Impossible de donner le rôle "
                 "・Civils."
             )
 
             print(
+
                 "Vérifie que le rôle du bot est "
                 "au-dessus du rôle ・Civils."
             )
@@ -1732,6 +1454,7 @@ async def on_member_join(
         except Exception as error:
 
             print(
+
                 f"❌ Erreur attribution rôle : "
                 f"{error}"
             )
@@ -1745,30 +1468,44 @@ async def on_member_join(
     )
 
     guild_config = config.get(
+
         guild_id,
+
         {}
     )
 
     welcome_channel_id = guild_config.get(
+
         "welcome_channel"
     )
+
+    # -----------------------------------------------------
+    # Aucun salon configuré
+    # -----------------------------------------------------
 
     if not welcome_channel_id:
 
         print(
+
             f"ℹ️ Aucun salon de bienvenue "
             f"configuré pour {guild.name}"
         )
 
         return
 
+    # -----------------------------------------------------
+    # Récupérer le salon
+    # -----------------------------------------------------
+
     channel = guild.get_channel(
+
         welcome_channel_id
     )
 
     if channel is None:
 
         print(
+
             "❌ Le salon de bienvenue "
             "n'existe plus."
         )
@@ -1797,12 +1534,17 @@ async def on_member_join(
         color=discord.Color.blurple()
     )
 
+    # Avatar du nouveau membre
     embed.set_thumbnail(
+
         url=member.display_avatar.url
     )
 
+    # Nombre de membres
     embed.set_footer(
+
         text=(
+
             f"Nous sommes maintenant "
             f"{guild.member_count} membres !"
         )
@@ -1811,10 +1553,12 @@ async def on_member_join(
     try:
 
         await channel.send(
+
             embed=embed
         )
 
         print(
+
             f"👋 Message de bienvenue envoyé "
             f"pour {member}"
         )
@@ -1822,6 +1566,7 @@ async def on_member_join(
     except discord.Forbidden:
 
         print(
+
             "❌ Le bot n'a pas la permission "
             "d'envoyer des messages dans "
             "le salon de bienvenue."
@@ -1829,13 +1574,147 @@ async def on_member_join(
 
 
 # =========================================================
+# ERREUR /CONFIG
+# =========================================================
+
+
+@config_command.error
+async def config_command_error(
+
+    interaction: discord.Interaction,
+
+    error
+):
+
+    if isinstance(
+
+        error,
+
+        app_commands.errors.MissingPermissions
+    ):
+
+        await interaction.response.send_message(
+
+            "❌ Tu dois être administrateur "
+            "pour utiliser cette commande.",
+
+            ephemeral=True
+        )
+
+    else:
+
+        print(
+            f"❌ Erreur /config : {error}"
+        )
+
+        if not interaction.response.is_done():
+
+            await interaction.response.send_message(
+
+                "❌ Une erreur est survenue.",
+
+                ephemeral=True
+            )
+
+
+# =========================================================
+# ERREUR /TICKETPANEL
+# =========================================================
+
+
+@ticketpanel.error
+async def ticketpanel_error(
+
+    interaction: discord.Interaction,
+
+    error
+):
+
+    if isinstance(
+
+        error,
+
+        app_commands.errors.MissingPermissions
+    ):
+
+        await interaction.response.send_message(
+
+            "❌ Tu dois être administrateur "
+            "pour utiliser cette commande.",
+
+            ephemeral=True
+        )
+
+    else:
+
+        print(
+            f"❌ Erreur /ticketpanel : {error}"
+        )
+
+        if not interaction.response.is_done():
+
+            await interaction.response.send_message(
+
+                "❌ Une erreur est survenue.",
+
+                ephemeral=True
+            )
+
+
+# =========================================================
+# ERREUR /REGLEMENT
+# =========================================================
+
+
+@reglement_command.error
+async def reglement_command_error(
+
+    interaction: discord.Interaction,
+
+    error
+):
+
+    if isinstance(
+
+        error,
+
+        app_commands.errors.MissingPermissions
+    ):
+
+        await interaction.response.send_message(
+
+            "❌ Tu dois être administrateur "
+            "pour utiliser cette commande.",
+
+            ephemeral=True
+        )
+
+    else:
+
+        print(
+            f"❌ Erreur /reglement : {error}"
+        )
+
+        if not interaction.response.is_done():
+
+            await interaction.response.send_message(
+
+                "❌ Une erreur est survenue.",
+
+                ephemeral=True
+            )
+
+
+# =========================================================
 # BOT PRÊT
 # =========================================================
+
 
 @bot.event
 async def on_ready():
 
     print(
+
         f"✅ Connecté en tant que "
         f"{bot.user}"
     )
@@ -1845,12 +1724,14 @@ async def on_ready():
         synced = await bot.tree.sync()
 
         print(
+
             f"✅ {len(synced)} commande(s) synchronisée(s)"
         )
 
     except Exception as error:
 
         print(
+
             f"❌ Erreur de synchronisation : "
             f"{error}"
         )
