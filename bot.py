@@ -1,106 +1,58 @@
 import os
 import json
-import asyncio
-
 import discord
 from discord.ext import commands
 from discord import app_commands
-from openai import OpenAI
 
 
 # =========================================================
-# VARIABLES D'ENVIRONNEMENT
+# TOKEN
 # =========================================================
 
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-HF_TOKEN = os.getenv("HF_TOKEN")
+TOKEN = os.getenv("DISCORD_TOKEN")
 
-if not DISCORD_TOKEN:
-    raise RuntimeError(
-        "❌ DISCORD_TOKEN est manquant dans les variables Render."
-    )
-
-if not HF_TOKEN:
-    raise RuntimeError(
-        "❌ HF_TOKEN est manquant dans les variables Render."
+if not TOKEN:
+    raise ValueError(
+        "❌ La variable DISCORD_TOKEN n'est pas configurée."
     )
 
 
 # =========================================================
-# IA HUGGING FACE
-# =========================================================
-
-ai_client = OpenAI(
-    base_url="https://router.huggingface.co/v1",
-    api_key=HF_TOKEN
-)
-
-# Modèle gratuit via Hugging Face
-AI_MODEL = "openai/gpt-oss-120b:groq"
-
-# Nombre maximum de messages gardés en mémoire par ticket
-MAX_HISTORY = 12
-
-# Après combien de messages du membre on conseille le staff
-DEFAULT_ESCALATION_AFTER = 6
-
-
-# =========================================================
-# FICHIER CONFIG
+# FICHIER DE CONFIGURATION
 # =========================================================
 
 CONFIG_FILE = "config.json"
 
 
 def load_config():
-
-    if not os.path.exists(CONFIG_FILE):
-        return {}
-
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as file:
             return json.load(file)
 
-    except Exception as error:
-        print(f"Erreur lecture config.json : {error}")
+    except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
 
 def save_config(data):
-
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as file:
-            json.dump(
-                data,
-                file,
-                indent=4,
-                ensure_ascii=False
-            )
-
-    except Exception as error:
-        print(f"Erreur sauvegarde config.json : {error}")
+    with open(CONFIG_FILE, "w", encoding="utf-8") as file:
+        json.dump(
+            data,
+            file,
+            indent=4
+        )
 
 
 config = load_config()
 
 
 # =========================================================
-# MÉMOIRE DES TICKETS
-# =========================================================
-
-ticket_histories = {}
-
-ticket_user_messages = {}
-
-
-# =========================================================
-# INTENTS DISCORD
+# INTENTS
 # =========================================================
 
 intents = discord.Intents.default()
 
+# Nécessaire pour détecter les arrivées
 intents.members = True
-intents.message_content = True
 
 
 # =========================================================
@@ -109,383 +61,27 @@ intents.message_content = True
 
 class MyBot(commands.Bot):
 
-    def __init__(self):
-
-        super().__init__(
-            command_prefix="!",
-            intents=intents
-        )
-
     async def setup_hook(self):
 
+        # Boutons persistants
         self.add_view(TicketView())
         self.add_view(CloseTicketView())
 
-        try:
 
-            synced = await self.tree.sync()
-
-            print(
-                f"✅ {len(synced)} commande(s) slash synchronisée(s)."
-            )
-
-        except Exception as error:
-
-            print(
-                f"❌ Erreur synchronisation commandes : {error}"
-            )
-
-
-bot = MyBot()
+bot = MyBot(
+    command_prefix="!",
+    intents=intents
+)
 
 
 # =========================================================
-# OUTILS
-# =========================================================
-
-def get_guild_config(guild_id):
-
-    guild_id = str(guild_id)
-
-    if guild_id not in config:
-        config[guild_id] = {}
-
-    return config[guild_id]
-
-
-def is_ticket_channel(channel):
-
-    return (
-        isinstance(channel, discord.TextChannel)
-        and channel.topic is not None
-        and channel.topic.startswith("ticket:")
-    )
-
-
-def get_ticket_owner_id(channel):
-
-    if not is_ticket_channel(channel):
-        return None
-
-    try:
-
-        return int(
-            channel.topic.split(":")[1]
-        )
-
-    except Exception:
-
-        return None
-
-
-def get_staff_role(guild):
-
-    guild_config = get_guild_config(guild.id)
-
-    role_id = guild_config.get(
-        "ticket_staff_role"
-    )
-
-    if not role_id:
-        return None
-
-    return guild.get_role(
-        int(role_id)
-    )
-
-
-# =========================================================
-# PROMPT DE L'IA
-# =========================================================
-
-AI_SYSTEM_PROMPT = """
-Tu es l'assistant IA officiel du serveur Discord
-SouthLife Rôle-Play.
-
-Ton travail est d'aider les membres dans leurs tickets.
-
-IMPORTANT :
-
-- Réponds toujours en français.
-- Sois poli et professionnel.
-- Sois assez court et facile à comprendre.
-- Commence par comprendre le problème.
-- Pose des questions si des informations manquent.
-- Propose des solutions simples et concrètes lorsque tu peux.
-- Tu n'es PAS un membre humain du staff.
-- Ne prétends jamais avoir des permissions que tu n'as pas.
-- Ne prends jamais une décision officielle à la place du staff.
-- Pour une sanction, un bannissement, une plainte importante,
-  une demande administrative ou une situation nécessitant
-  un accès que tu n'as pas, demande l'intervention du staff.
-- Ne demande jamais de mot de passe, token, code secret,
-  informations bancaires ou autre donnée sensible.
-- Si le staff doit intervenir, commence ta réponse par :
-  [STAFF]
-- Si tu peux continuer à aider seul, ne mets pas [STAFF].
-
-Le serveur est SouthLife Rôle-Play.
-"""
-
-
-# =========================================================
-# APPEL À L'IA
-# =========================================================
-
-async def ask_ai(channel, member, user_message):
-
-    channel_id = channel.id
-
-    if channel_id not in ticket_histories:
-
-        ticket_histories[channel_id] = []
-
-    history = ticket_histories[channel_id]
-
-    # Message du membre
-    history.append(
-        {
-            "role": "user",
-            "content": user_message
-        }
-    )
-
-    # Limite de mémoire
-    history = history[-MAX_HISTORY:]
-
-    ticket_histories[channel_id] = history
-
-    try:
-
-        response = await asyncio.to_thread(
-            ai_client.chat.completions.create,
-            model=AI_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": AI_SYSTEM_PROMPT
-                },
-                *history
-            ],
-            max_tokens=500
-        )
-
-        answer = response.choices[0].message.content
-
-        if not answer:
-            return None, False
-
-        answer = answer.strip()
-
-        staff_needed = False
-
-        if answer.startswith("[STAFF]"):
-
-            staff_needed = True
-
-            answer = answer[
-                len("[STAFF]"):
-            ].strip()
-
-        # Ajouter réponse IA à l'historique
-        history.append(
-            {
-                "role": "assistant",
-                "content": answer
-            }
-        )
-
-        ticket_histories[channel_id] = (
-            history[-MAX_HISTORY:]
-        )
-
-        return answer, staff_needed
-
-    except Exception as error:
-
-        print(
-            f"❌ Erreur IA : {error}"
-        )
-
-        return None, False
-
-
-# =========================================================
-# RÉPONSE IA DANS UN TICKET
-# =========================================================
-
-async def send_ai_response(message):
-
-    channel = message.channel
-    guild = message.guild
-
-    if not guild:
-        return
-
-    if not is_ticket_channel(channel):
-        return
-
-    guild_config = get_guild_config(
-        guild.id
-    )
-
-    # IA activée ?
-    if not guild_config.get(
-        "ai_enabled",
-        True
-    ):
-        return
-
-    # Rôle staff
-    staff_role = get_staff_role(guild)
-
-    # Si la personne est staff, pas de réponse IA
-    if staff_role:
-
-        if staff_role in message.author.roles:
-            return
-
-    # Compteur
-    channel_id = channel.id
-
-    ticket_user_messages[channel_id] = (
-        ticket_user_messages.get(
-            channel_id,
-            0
-        ) + 1
-    )
-
-    user_message_count = (
-        ticket_user_messages[channel_id]
-    )
-
-    escalation_after = guild_config.get(
-        "ai_escalation_after",
-        DEFAULT_ESCALATION_AFTER
-    )
-
-    # L'IA réfléchit
-    async with channel.typing():
-
-        answer, staff_needed = await ask_ai(
-            channel,
-            message.author,
-            message.content
-        )
-
-    # Erreur
-    if not answer:
-
-        await channel.send(
-            "⚠️ L'assistant IA est momentanément "
-            "indisponible. Un membre du staff peut "
-            "prendre le relais."
-        )
-
-        return
-
-    # =====================================================
-    # TRANSFERT DEMANDÉ PAR L'IA
-    # =====================================================
-
-    if staff_needed:
-
-        embed = discord.Embed(
-            title="🤖➡️👮 Intervention du staff",
-            description=answer,
-            color=discord.Color.orange()
-        )
-
-        embed.set_footer(
-            text="L'assistant IA recommande l'intervention du staff."
-        )
-
-        if staff_role:
-
-            await channel.send(
-                content=staff_role.mention,
-                embed=embed
-            )
-
-        else:
-
-            await channel.send(
-                embed=embed
-            )
-
-        return
-
-    # =====================================================
-    # TRANSFERT AUTOMATIQUE APRÈS X MESSAGES
-    # =====================================================
-
-    if user_message_count >= escalation_after:
-
-        embed = discord.Embed(
-            title="🤖➡️👮 Passage au staff",
-            description=answer,
-            color=discord.Color.orange()
-        )
-
-        embed.add_field(
-            name="ℹ️ Information",
-            value=(
-                "Plusieurs échanges ont eu lieu avec "
-                "l'assistant IA. Un membre du staff est "
-                "invité à reprendre le ticket."
-            ),
-            inline=False
-        )
-
-        embed.set_footer(
-            text="SouthLife Rôle-Play • Assistant IA"
-        )
-
-        if staff_role:
-
-            await channel.send(
-                content=staff_role.mention,
-                embed=embed
-            )
-
-        else:
-
-            await channel.send(
-                embed=embed
-            )
-
-        return
-
-    # =====================================================
-    # RÉPONSE NORMALE
-    # =====================================================
-
-    embed = discord.Embed(
-        title="🤖 Assistant SouthLife",
-        description=answer,
-        color=discord.Color.blurple()
-    )
-
-    embed.set_footer(
-        text="Assistant IA • SouthLife Rôle-Play"
-    )
-
-    await channel.send(
-        embed=embed
-    )
-
-
-# =========================================================
-# OUVERTURE TICKET
+# SYSTÈME DE TICKETS
 # =========================================================
 
 class TicketView(discord.ui.View):
 
     def __init__(self):
-
-        super().__init__(
-            timeout=None
-        )
+        super().__init__(timeout=None)
 
     @discord.ui.button(
         label="Ouvrir un ticket",
@@ -502,8 +98,16 @@ class TicketView(discord.ui.View):
         guild = interaction.guild
         member = interaction.user
 
-        guild_config = get_guild_config(
-            guild.id
+        if guild is None:
+            return
+
+        # -------------------------------------------------
+        # Récupérer la configuration
+        # -------------------------------------------------
+
+        guild_config = config.get(
+            str(guild.id),
+            {}
         )
 
         category_id = guild_config.get(
@@ -514,44 +118,57 @@ class TicketView(discord.ui.View):
             "ticket_staff_role"
         )
 
+        # -------------------------------------------------
+        # Vérifier la configuration
+        # -------------------------------------------------
+
         if not category_id:
 
             await interaction.response.send_message(
-                "❌ Le système de tickets n'est pas configuré.",
+                "❌ Le système de tickets n'est pas configuré.\n\n"
+                "Un administrateur doit utiliser `/config` "
+                "puis **🎫 Tickets**.",
                 ephemeral=True
             )
 
             return
+
+        # -------------------------------------------------
+        # Récupérer la catégorie
+        # -------------------------------------------------
 
         category = guild.get_channel(
-            int(category_id)
+            category_id
         )
 
-        if not category:
+        if category is None:
 
             await interaction.response.send_message(
-                "❌ La catégorie des tickets est introuvable.",
+                "❌ La catégorie configurée n'existe plus.\n\n"
+                "Utilise `/config` pour la reconfigurer.",
                 ephemeral=True
             )
 
             return
 
-        # Vérifier ticket déjà ouvert
+        # -------------------------------------------------
+        # Vérifier si l'utilisateur a déjà un ticket
+        # -------------------------------------------------
+
         for channel in guild.text_channels:
 
-            if (
-                channel.topic
-                and channel.topic
-                == f"ticket:{member.id}"
-            ):
+            if channel.topic == f"ticket:{member.id}":
 
                 await interaction.response.send_message(
-                    f"❌ Tu as déjà un ticket ouvert : "
-                    f"{channel.mention}",
+                    f"❌ Tu as déjà un ticket : {channel.mention}",
                     ephemeral=True
                 )
 
                 return
+
+        # -------------------------------------------------
+        # Permissions
+        # -------------------------------------------------
 
         overwrites = {
 
@@ -564,23 +181,21 @@ class TicketView(discord.ui.View):
                 discord.PermissionOverwrite(
                     view_channel=True,
                     send_messages=True,
-                    read_message_history=True
-                ),
-
-            guild.me:
-                discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=True,
-                    manage_channels=True,
-                    read_message_history=True
+                    read_message_history=True,
+                    attach_files=True
                 )
         }
 
-        # Staff
+        # -------------------------------------------------
+        # Rôle Staff
+        # -------------------------------------------------
+
+        staff_role = None
+
         if staff_role_id:
 
             staff_role = guild.get_role(
-                int(staff_role_id)
+                staff_role_id
             )
 
             if staff_role:
@@ -589,55 +204,45 @@ class TicketView(discord.ui.View):
                     discord.PermissionOverwrite(
                         view_channel=True,
                         send_messages=True,
-                        read_message_history=True
+                        read_message_history=True,
+                        attach_files=True
                     )
                 )
 
+        # -------------------------------------------------
+        # Créer le ticket
+        # -------------------------------------------------
+
         channel = await guild.create_text_channel(
 
-            name=f"ticket-{member.id}",
+            name=f"ticket-{member.name}",
 
             category=category,
 
             overwrites=overwrites,
 
-            topic=f"ticket:{member.id}",
-
-            reason=f"Ticket ouvert par {member}"
+            topic=f"ticket:{member.id}"
         )
 
-        # Mémoire IA
-        ticket_histories[channel.id] = []
+        # -------------------------------------------------
+        # Embed du ticket
+        # -------------------------------------------------
 
-        ticket_user_messages[channel.id] = 0
-
-        # Message ticket
         embed = discord.Embed(
 
             title="🎫 Ticket ouvert",
 
             description=(
-                f"Bonjour {member.mention} !\n\n"
+                f"Bienvenue {member.mention} !\n\n"
 
-                "Bienvenue dans ton ticket.\n\n"
+                "Explique ton problème ou ta demande ici.\n"
+                "Un membre du staff viendra te répondre.\n\n"
 
-                "🤖 **Assistant IA disponible**\n"
-                "Explique ton problème clairement et "
-                "l'assistant essaiera de t'aider.\n\n"
-
-                "👮 Si l'IA ne peut pas résoudre ton problème "
-                "ou si une intervention humaine est nécessaire, "
-                "le staff pourra prendre le relais.\n\n"
-
-                "🔒 Tu peux utiliser le bouton ci-dessous "
-                "pour fermer le ticket."
+                "Lorsque ton problème est réglé, "
+                "utilise le bouton **🔒 Fermer le ticket**."
             ),
 
-            color=discord.Color.green()
-        )
-
-        embed.set_footer(
-            text="SouthLife Rôle-Play • Système de tickets"
+            color=discord.Color.blurple()
         )
 
         await channel.send(
@@ -651,347 +256,195 @@ class TicketView(discord.ui.View):
 
         await interaction.response.send_message(
 
-            f"✅ Ton ticket a été créé : "
-            f"{channel.mention}",
+            f"✅ Ton ticket a été créé : {channel.mention}",
 
             ephemeral=True
         )
 
 
 # =========================================================
-# FERMETURE TICKET
+# FERMER UN TICKET
 # =========================================================
 
 class CloseTicketView(discord.ui.View):
 
     def __init__(self):
-
-        super().__init__(
-            timeout=None
-        )
+        super().__init__(timeout=None)
 
     @discord.ui.button(
+
         label="Fermer le ticket",
+
         emoji="🔒",
+
         style=discord.ButtonStyle.red,
+
         custom_id="close_ticket"
     )
     async def close_ticket(
+
         self,
+
         interaction: discord.Interaction,
+
         button: discord.ui.Button
     ):
 
         channel = interaction.channel
         guild = interaction.guild
-        member = interaction.user
 
-        owner_id = get_ticket_owner_id(
-            channel
-        )
+        if channel is None or guild is None:
+            return
 
-        if owner_id is None:
+        # -------------------------------------------------
+        # Vérifier que c'est un ticket
+        # -------------------------------------------------
+
+        if (
+            not channel.topic
+            or not channel.topic.startswith("ticket:")
+        ):
 
             await interaction.response.send_message(
+
                 "❌ Ce salon n'est pas un ticket.",
+
                 ephemeral=True
             )
 
             return
 
-        staff_role = get_staff_role(
-            guild
+        # -------------------------------------------------
+        # Récupérer le propriétaire
+        # -------------------------------------------------
+
+        try:
+
+            owner_id = int(
+                channel.topic.split(":")[1]
+            )
+
+        except (ValueError, IndexError):
+
+            await interaction.response.send_message(
+
+                "❌ Impossible de déterminer "
+                "le propriétaire du ticket.",
+
+                ephemeral=True
+            )
+
+            return
+
+        # -------------------------------------------------
+        # Récupérer le rôle Staff
+        # -------------------------------------------------
+
+        guild_config = config.get(
+
+            str(guild.id),
+
+            {}
         )
 
+        staff_role_id = guild_config.get(
+
+            "ticket_staff_role"
+        )
+
+        staff_role = None
+
+        if staff_role_id:
+
+            staff_role = guild.get_role(
+                staff_role_id
+            )
+
+        # -------------------------------------------------
+        # Vérifier les permissions
+        # -------------------------------------------------
+
         is_owner = (
-            member.id == owner_id
+            interaction.user.id == owner_id
         )
 
         is_staff = (
-            staff_role
-            and staff_role in member.roles
+            staff_role is not None
+            and staff_role in interaction.user.roles
         )
 
         if not is_owner and not is_staff:
 
             await interaction.response.send_message(
-                "❌ Tu n'as pas la permission de fermer ce ticket.",
+
+                "❌ Tu n'as pas la permission "
+                "de fermer ce ticket.",
+
                 ephemeral=True
             )
 
             return
 
-        await interaction.response.send_message(
-            "🔒 Fermeture du ticket dans 3 secondes..."
-        )
-
-        # Nettoyage mémoire
-        ticket_histories.pop(
-            channel.id,
-            None
-        )
-
-        ticket_user_messages.pop(
-            channel.id,
-            None
-        )
-
-        await asyncio.sleep(3)
-
-        try:
-
-            await channel.delete(
-                reason=f"Ticket fermé par {member}"
-            )
-
-        except Exception as error:
-
-            print(
-                f"Erreur suppression ticket : {error}"
-            )
-
-
-# =========================================================
-# CONFIGURATION PRINCIPALE
-# =========================================================
-
-class ConfigView(discord.ui.View):
-
-    def __init__(self):
-
-        super().__init__(
-            timeout=180
-        )
-
-    # -----------------------------------------------------
-    # BIENVENUE
-    # -----------------------------------------------------
-
-    @discord.ui.button(
-        label="Bienvenue",
-        emoji="👋",
-        style=discord.ButtonStyle.primary
-    )
-    async def welcome_button(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-
-        if not interaction.user.guild_permissions.administrator:
-
-            await interaction.response.send_message(
-                "❌ Tu dois être administrateur.",
-                ephemeral=True
-            )
-
-            return
-
-        embed = discord.Embed(
-
-            title="👋 Configuration bienvenue",
-
-            description=(
-                "Choisis le salon dans lequel les "
-                "messages de bienvenue seront envoyés."
-            ),
-
-            color=discord.Color.blurple()
-        )
-
-        await interaction.response.edit_message(
-
-            embed=embed,
-
-            view=WelcomeConfigView()
-        )
-
-    # -----------------------------------------------------
-    # TICKETS
-    # -----------------------------------------------------
-
-    @discord.ui.button(
-        label="Tickets",
-        emoji="🎫",
-        style=discord.ButtonStyle.success
-    )
-    async def tickets_button(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-
-        if not interaction.user.guild_permissions.administrator:
-
-            await interaction.response.send_message(
-                "❌ Tu dois être administrateur.",
-                ephemeral=True
-            )
-
-            return
-
-        embed = discord.Embed(
-
-            title="🎫 Configuration des tickets",
-
-            description=(
-                "Configure :\n\n"
-                "📁 Catégorie des tickets\n"
-                "📢 Salon du panneau\n"
-                "👮 Rôle Staff\n"
-            ),
-
-            color=discord.Color.green()
-        )
-
-        await interaction.response.edit_message(
-
-            embed=embed,
-
-            view=TicketConfigView()
-        )
-
-    # -----------------------------------------------------
-    # IA
-    # -----------------------------------------------------
-
-    @discord.ui.button(
-        label="Assistant IA",
-        emoji="🤖",
-        style=discord.ButtonStyle.secondary
-    )
-    async def ai_button(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-
-        if not interaction.user.guild_permissions.administrator:
-
-            await interaction.response.send_message(
-                "❌ Tu dois être administrateur.",
-                ephemeral=True
-            )
-
-            return
-
-        guild_config = get_guild_config(
-            interaction.guild.id
-        )
-
-        enabled = guild_config.get(
-            "ai_enabled",
-            True
-        )
-
-        threshold = guild_config.get(
-            "ai_escalation_after",
-            DEFAULT_ESCALATION_AFTER
-        )
-
-        status = (
-            "🟢 Activée"
-            if enabled
-            else "🔴 Désactivée"
-        )
-
-        embed = discord.Embed(
-
-            title="🤖 Assistant IA",
-
-            description=(
-                f"**État :** {status}\n\n"
-                f"**Passage automatique au staff :** "
-                f"{threshold} messages du membre.\n\n"
-                "L'IA répond uniquement dans les tickets."
-            ),
-
-            color=discord.Color.blurple()
-        )
-
-        await interaction.response.edit_message(
-
-            embed=embed,
-
-            view=AIConfigView()
-        )
-
-
-# =========================================================
-# CONFIGURATION BIENVENUE
-# =========================================================
-
-class WelcomeChannelSelect(
-    discord.ui.ChannelSelect
-):
-
-    def __init__(self):
-
-        super().__init__(
-
-            placeholder="Choisir le salon de bienvenue",
-
-            channel_types=[
-                discord.ChannelType.text
-            ],
-
-            min_values=1,
-
-            max_values=1
-        )
-
-    async def callback(
-        self,
-        interaction: discord.Interaction
-    ):
-
-        selected_channel = self.values[0]
-
-        guild_config = get_guild_config(
-            interaction.guild.id
-        )
-
-        guild_config[
-            "welcome_channel"
-        ] = selected_channel.id
-
-        save_config(config)
+        # -------------------------------------------------
+        # Fermer
+        # -------------------------------------------------
 
         await interaction.response.send_message(
 
-            f"✅ Salon de bienvenue enregistré : "
-            f"{selected_channel.mention}",
-
-            ephemeral=True
+            "🔒 Le ticket va être fermé..."
         )
 
+        await channel.delete()
 
-class WelcomeConfigView(discord.ui.View):
+
+# =========================================================
+# CONFIGURATION DES TICKETS
+# =========================================================
+
+class TicketConfigView(discord.ui.View):
 
     def __init__(self):
 
-        super().__init__(
-            timeout=180
+        super().__init__(timeout=300)
+
+        self.category_id = None
+        self.channel_id = None
+        self.staff_role_id = None
+
+        self.add_item(
+            TicketCategorySelect(self)
         )
 
         self.add_item(
-            WelcomeChannelSelect()
+            TicketChannelSelect(self)
+        )
+
+        self.add_item(
+            TicketStaffRoleSelect(self)
+        )
+
+        self.add_item(
+            SaveTicketConfigButton(self)
         )
 
 
 # =========================================================
-# CONFIGURATION TICKETS
+# SÉLECTION CATÉGORIE
 # =========================================================
 
 class TicketCategorySelect(
     discord.ui.ChannelSelect
 ):
 
-    def __init__(self):
+    def __init__(self, parent_view):
+
+        self.parent_view = parent_view
 
         super().__init__(
 
-            placeholder="Choisir la catégorie des tickets",
+            placeholder=(
+                "📁 Choisir la catégorie des tickets"
+            ),
 
             channel_types=[
                 discord.ChannelType.category
@@ -1007,36 +460,36 @@ class TicketCategorySelect(
         interaction: discord.Interaction
     ):
 
-        selected = self.values[0]
-
-        guild_config = get_guild_config(
-            interaction.guild.id
+        self.parent_view.category_id = (
+            self.values[0].id
         )
-
-        guild_config[
-            "ticket_category"
-        ] = selected.id
-
-        save_config(config)
 
         await interaction.response.send_message(
 
-            f"✅ Catégorie enregistrée : "
-            f"**{selected.name}**",
+            f"📁 Catégorie sélectionnée : "
+            f"**{self.values[0].name}**",
 
             ephemeral=True
         )
 
 
+# =========================================================
+# SÉLECTION SALON DU PANEL
+# =========================================================
+
 class TicketChannelSelect(
     discord.ui.ChannelSelect
 ):
 
-    def __init__(self):
+    def __init__(self, parent_view):
+
+        self.parent_view = parent_view
 
         super().__init__(
 
-            placeholder="Choisir le salon du panneau ticket",
+            placeholder=(
+                "📞 Choisir le salon du panneau"
+            ),
 
             channel_types=[
                 discord.ChannelType.text
@@ -1052,36 +505,36 @@ class TicketChannelSelect(
         interaction: discord.Interaction
     ):
 
-        selected = self.values[0]
-
-        guild_config = get_guild_config(
-            interaction.guild.id
+        self.parent_view.channel_id = (
+            self.values[0].id
         )
-
-        guild_config[
-            "ticket_channel"
-        ] = selected.id
-
-        save_config(config)
 
         await interaction.response.send_message(
 
-            f"✅ Salon du panneau enregistré : "
-            f"{selected.mention}",
+            f"📞 Salon sélectionné : "
+            f"{self.values[0].mention}",
 
             ephemeral=True
         )
 
 
+# =========================================================
+# SÉLECTION RÔLE STAFF
+# =========================================================
+
 class TicketStaffRoleSelect(
     discord.ui.RoleSelect
 ):
 
-    def __init__(self):
+    def __init__(self, parent_view):
+
+        self.parent_view = parent_view
 
         super().__init__(
 
-            placeholder="Choisir le rôle Staff",
+            placeholder=(
+                "👮 Choisir le rôle du staff"
+            ),
 
             min_values=1,
 
@@ -1093,32 +546,30 @@ class TicketStaffRoleSelect(
         interaction: discord.Interaction
     ):
 
-        selected = self.values[0]
-
-        guild_config = get_guild_config(
-            interaction.guild.id
+        self.parent_view.staff_role_id = (
+            self.values[0].id
         )
-
-        guild_config[
-            "ticket_staff_role"
-        ] = selected.id
-
-        save_config(config)
 
         await interaction.response.send_message(
 
-            f"✅ Rôle Staff enregistré : "
-            f"{selected.mention}",
+            f"👮 Rôle sélectionné : "
+            f"{self.values[0].mention}",
 
             ephemeral=True
         )
 
 
+# =========================================================
+# BOUTON ENREGISTRER
+# =========================================================
+
 class SaveTicketConfigButton(
     discord.ui.Button
 ):
 
-    def __init__(self):
+    def __init__(self, parent_view):
+
+        self.parent_view = parent_view
 
         super().__init__(
 
@@ -1126,7 +577,7 @@ class SaveTicketConfigButton(
 
             emoji="💾",
 
-            style=discord.ButtonStyle.success
+            style=discord.ButtonStyle.green
         )
 
     async def callback(
@@ -1134,95 +585,119 @@ class SaveTicketConfigButton(
         interaction: discord.Interaction
     ):
 
-        guild_config = get_guild_config(
+        view = self.parent_view
+
+        if view.category_id is None:
+
+            await interaction.response.send_message(
+
+                "❌ Tu dois choisir une catégorie.",
+
+                ephemeral=True
+            )
+
+            return
+
+        if view.channel_id is None:
+
+            await interaction.response.send_message(
+
+                "❌ Tu dois choisir le salon du panneau.",
+
+                ephemeral=True
+            )
+
+            return
+
+        if view.staff_role_id is None:
+
+            await interaction.response.send_message(
+
+                "❌ Tu dois choisir le rôle du staff.",
+
+                ephemeral=True
+            )
+
+            return
+
+        guild_id = str(
             interaction.guild.id
         )
 
-        if not guild_config.get(
+        if guild_id not in config:
+
+            config[guild_id] = {}
+
+        config[guild_id][
             "ticket_category"
-        ):
+        ] = view.category_id
 
-            await interaction.response.send_message(
-                "❌ Sélectionne la catégorie.",
-                ephemeral=True
-            )
-
-            return
-
-        if not guild_config.get(
+        config[guild_id][
             "ticket_channel"
-        ):
+        ] = view.channel_id
 
-            await interaction.response.send_message(
-                "❌ Sélectionne le salon du panneau.",
-                ephemeral=True
-            )
-
-            return
-
-        if not guild_config.get(
+        config[guild_id][
             "ticket_staff_role"
-        ):
-
-            await interaction.response.send_message(
-                "❌ Sélectionne le rôle Staff.",
-                ephemeral=True
-            )
-
-            return
+        ] = view.staff_role_id
 
         save_config(config)
 
         await interaction.response.send_message(
 
-            "✅ Configuration des tickets enregistrée !",
+            "✅ **Configuration des tickets enregistrée !**\n\n"
+
+            f"📁 Catégorie : <#{view.category_id}>\n"
+
+            f"📞 Salon : <#{view.channel_id}>\n"
+
+            f"👮 Rôle staff : <@&{view.staff_role_id}>",
 
             ephemeral=True
         )
 
 
-class TicketConfigView(discord.ui.View):
-
-    def __init__(self):
-
-        super().__init__(
-            timeout=180
-        )
-
-        self.add_item(
-            TicketCategorySelect()
-        )
-
-        self.add_item(
-            TicketChannelSelect()
-        )
-
-        self.add_item(
-            TicketStaffRoleSelect()
-        )
-
-        self.add_item(
-            SaveTicketConfigButton()
-        )
-
-
 # =========================================================
-# CONFIGURATION IA
+# CONFIGURATION BIENVENUE
 # =========================================================
 
-class AIToggleButton(
-    discord.ui.Button
+class WelcomeConfigView(
+    discord.ui.View
 ):
 
     def __init__(self):
 
+        super().__init__(timeout=300)
+
+        self.add_item(
+            WelcomeChannelSelect(self)
+        )
+
+
+# =========================================================
+# SÉLECTION SALON BIENVENUE
+# =========================================================
+
+class WelcomeChannelSelect(
+    discord.ui.ChannelSelect
+):
+
+    def __init__(self, parent_view):
+
+        self.parent_view = parent_view
+
         super().__init__(
 
-            label="Activer / Désactiver",
+            placeholder=(
+                "👋 Choisir le salon de bienvenue"
+            ),
 
-            emoji="🤖",
+            channel_types=[
+                discord.ChannelType.text
+            ],
 
-            style=discord.ButtonStyle.primary
+            min_values=1,
+
+            max_values=1
         )
 
     async def callback(
@@ -1230,132 +705,139 @@ class AIToggleButton(
         interaction: discord.Interaction
     ):
 
-        guild_config = get_guild_config(
+        channel = self.values[0]
+
+        guild_id = str(
             interaction.guild.id
         )
 
-        current = guild_config.get(
-            "ai_enabled",
-            True
-        )
+        if guild_id not in config:
 
-        guild_config[
-            "ai_enabled"
-        ] = not current
+            config[guild_id] = {}
+
+        config[guild_id][
+            "welcome_channel"
+        ] = channel.id
 
         save_config(config)
 
-        status = (
-            "🟢 activée"
-            if guild_config["ai_enabled"]
-            else "🔴 désactivée"
-        )
-
         await interaction.response.send_message(
 
-            f"✅ Assistant IA {status}.",
+            f"✅ Le salon de bienvenue est maintenant "
+            f"{channel.mention}.",
 
             ephemeral=True
         )
 
 
-class AIThresholdButton(
-    discord.ui.Button
+# =========================================================
+# MENU /CONFIG
+# =========================================================
+
+class ConfigView(
+    discord.ui.View
 ):
 
     def __init__(self):
 
-        super().__init__(
+        super().__init__(timeout=300)
 
-            label="Changer le seuil",
+    # -----------------------------------------------------
+    # BIENVENUE
+    # -----------------------------------------------------
 
-            emoji="🔢",
+    @discord.ui.button(
 
-            style=discord.ButtonStyle.secondary
-        )
+        label="Bienvenue",
 
-    async def callback(
-        self,
-        interaction: discord.Interaction
-    ):
+        emoji="👋",
 
-        await interaction.response.send_modal(
-            AIThresholdModal()
-        )
-
-
-class AIConfigView(discord.ui.View):
-
-    def __init__(self):
-
-        super().__init__(
-            timeout=180
-        )
-
-        self.add_item(
-            AIToggleButton()
-        )
-
-        self.add_item(
-            AIThresholdButton()
-        )
-
-
-class AIThresholdModal(
-    discord.ui.Modal,
-    title="Seuil de transfert IA"
-):
-
-    threshold = discord.ui.TextInput(
-
-        label="Nombre de messages",
-
-        placeholder="Exemple : 6",
-
-        required=True,
-
-        max_length=2
+        style=discord.ButtonStyle.primary
     )
+    async def welcome_config(
 
-    async def on_submit(
         self,
-        interaction: discord.Interaction
+
+        interaction: discord.Interaction,
+
+        button: discord.ui.Button
     ):
 
-        try:
+        embed = discord.Embed(
 
-            value = int(
-                self.threshold.value
-            )
+            title="👋 Configuration du bienvenue",
 
-            if value < 1 or value > 20:
-                raise ValueError
+            description=(
 
-        except ValueError:
+                "Configure ici ton système de bienvenue.\n\n"
 
-            await interaction.response.send_message(
+                "Sélectionne le salon dans lequel "
+                "les messages de bienvenue seront envoyés."
+            ),
 
-                "❌ Choisis un nombre entre 1 et 20.",
-
-                ephemeral=True
-            )
-
-            return
-
-        guild_config = get_guild_config(
-            interaction.guild.id
+            color=discord.Color.blurple()
         )
-
-        guild_config[
-            "ai_escalation_after"
-        ] = value
-
-        save_config(config)
 
         await interaction.response.send_message(
 
-            f"✅ Le transfert automatique se fera "
-            f"après **{value} messages**.",
+            embed=embed,
+
+            view=WelcomeConfigView(),
+
+            ephemeral=True
+        )
+
+    # -----------------------------------------------------
+    # TICKETS
+    # -----------------------------------------------------
+
+    @discord.ui.button(
+
+        label="Tickets",
+
+        emoji="🎫",
+
+        style=discord.ButtonStyle.secondary
+    )
+    async def tickets_config(
+
+        self,
+
+        interaction: discord.Interaction,
+
+        button: discord.ui.Button
+    ):
+
+        embed = discord.Embed(
+
+            title="🎫 Configuration des tickets",
+
+            description=(
+
+                "Configure ici ton système de tickets.\n\n"
+
+                "📁 **Catégorie**\n"
+                "Les tickets seront créés dans cette catégorie.\n\n"
+
+                "📞 **Salon du panneau**\n"
+                "Le panneau `/ticketpanel` sera envoyé "
+                "dans ce salon.\n\n"
+
+                "👮 **Rôle staff**\n"
+                "Ce rôle pourra accéder aux tickets.\n\n"
+
+                "Sélectionne les éléments ci-dessous "
+                "puis appuie sur **💾 Enregistrer**."
+            ),
+
+            color=discord.Color.blurple()
+        )
+
+        await interaction.response.send_message(
+
+            embed=embed,
+
+            view=TicketConfigView(),
 
             ephemeral=True
         )
@@ -1366,38 +848,58 @@ class AIThresholdModal(
 # =========================================================
 
 @bot.tree.command(
+
     name="config",
-    description="Configurer le bot SouthLife"
+
+    description=(
+        "Configurer les fonctionnalités du bot"
+    )
 )
 @app_commands.checks.has_permissions(
     administrator=True
 )
 async def config_command(
+
     interaction: discord.Interaction
 ):
 
     embed = discord.Embed(
 
-        title="⚙️ Configuration SouthLife",
+        title="⚙️ Configuration",
 
         description=(
-            "Bienvenue dans le panneau de configuration.\n\n"
 
-            "👋 **Bienvenue**\n"
-            "Configure le salon de bienvenue.\n\n"
+            "**Bienvenue dans le panneau de "
+            "configuration de SouthLife Rôle-Play.**\n\n"
 
-            "🎫 **Tickets**\n"
-            "Configure le système de tickets.\n\n"
-
-            "🤖 **Assistant IA**\n"
-            "Configure l'assistant IA des tickets."
+            "Sélectionne une fonctionnalité "
+            "ci-dessous pour la configurer."
         ),
 
         color=discord.Color.blurple()
     )
 
-    embed.set_footer(
-        text="SouthLife Rôle-Play • Configuration"
+    embed.add_field(
+
+        name="👋 Bienvenue",
+
+        value=(
+            "Configure le système de bienvenue "
+            "et l'attribution du rôle."
+        ),
+
+        inline=False
+    )
+
+    embed.add_field(
+
+        name="🎫 Tickets",
+
+        value=(
+            "Configure le système de tickets."
+        ),
+
+        inline=False
     )
 
     await interaction.response.send_message(
@@ -1410,95 +912,115 @@ async def config_command(
     )
 
 
-@config_command.error
-async def config_command_error(
-    interaction: discord.Interaction,
-    error
-):
-
-    if isinstance(
-        error,
-        app_commands.errors.MissingPermissions
-    ):
-
-        await interaction.response.send_message(
-
-            "❌ Tu dois être administrateur.",
-
-            ephemeral=True
-        )
-
-
 # =========================================================
 # /TICKETPANEL
 # =========================================================
 
 @bot.tree.command(
+
     name="ticketpanel",
-    description="Envoyer le panneau de création de tickets"
+
+    description=(
+        "Créer le panneau pour ouvrir des tickets"
+    )
 )
 @app_commands.checks.has_permissions(
     administrator=True
 )
-async def ticketpanel_command(
+async def ticketpanel(
+
     interaction: discord.Interaction
 ):
 
-    guild_config = get_guild_config(
-        interaction.guild.id
+    guild = interaction.guild
+
+    if guild is None:
+        return
+
+    guild_id = str(
+        guild.id
+    )
+
+    guild_config = config.get(
+
+        guild_id,
+
+        {}
     )
 
     channel_id = guild_config.get(
+
         "ticket_channel"
     )
+
+    # -----------------------------------------------------
+    # Vérifier la configuration
+    # -----------------------------------------------------
 
     if not channel_id:
 
         await interaction.response.send_message(
 
-            "❌ Configure d'abord le salon du panneau avec `/config`.",
+            "❌ Le système de tickets n'est pas configuré.\n\n"
+
+            "Utilise `/config` → **🎫 Tickets** "
+            "pour le configurer.",
 
             ephemeral=True
         )
 
         return
 
-    channel = interaction.guild.get_channel(
-        int(channel_id)
+    # -----------------------------------------------------
+    # Récupérer le salon
+    # -----------------------------------------------------
+
+    channel = guild.get_channel(
+
+        channel_id
     )
 
-    if not channel:
+    if channel is None:
 
         await interaction.response.send_message(
 
-            "❌ Le salon configuré est introuvable.",
+            "❌ Le salon configuré n'existe plus.\n\n"
+
+            "Utilise `/config` → **🎫 Tickets** "
+            "pour choisir un nouveau salon.",
 
             ephemeral=True
         )
 
         return
+
+    # -----------------------------------------------------
+    # PANEL TICKETS
+    # -----------------------------------------------------
 
     embed = discord.Embed(
 
         title="Tickets",
 
         description=(
-            "Bienvenue dans l'onglet \"besoin d'aide\" "
+
+            'Bienvenue dans l\'onglet "besoin d\'aide" '
             "de SouthLife Rôle-Play.\n\n"
 
-            "Si vous avez besoin d'aide vous êtes au bon endroit ! "
-            "Cependant si votre aide ne nécessite pas forcément "
-            "un ticket Discord, faites un report en jeu et attendez "
-            "un staff.\n\n"
+            "Si vous avez besoin d'aide vous êtes au "
+            "bon endroit ! Cependant si votre aide ne "
+            "nécessite pas forcément un ticket Discord, "
+            "faites un report en jeu et attendez un staff.\n\n"
 
-            "Lorsque vous créez un ticket merci d'être le plus "
-            "précis possible dans votre démarche.\n\n"
+            "Lorsque vous créez un ticket merci d'être "
+            "le plus précis possible dans votre démarche.\n\n"
 
-            "Cela facilitera la compréhension du staff et la "
-            "rapidité de résolution de votre demande.\n\n"
+            "Cela facilitera la compréhension du staff "
+            "et la rapidité de résolution de votre demande.\n\n"
 
-            "À noter que nous sommes des humains, pas des robots. "
-            "Merci donc de patienter sagement qu'un staff vous réponde.\n\n"
+            "À noter que nous sommes des humains, pas "
+            "des robots. Merci donc de patienter sagement "
+            "qu'un staff vous réponde.\n\n"
 
             "(Les pings abusifs seront sanctionnés.)\n\n"
 
@@ -1512,7 +1034,11 @@ async def ticketpanel_command(
     )
 
     embed.set_footer(
-        text="Système de tickets • SouthLife Rôle-Play"
+
+        text=(
+            "Système de tickets • "
+            "SouthLife Rôle-Play"
+        )
     )
 
     await channel.send(
@@ -1524,50 +1050,43 @@ async def ticketpanel_command(
 
     await interaction.response.send_message(
 
-        f"✅ Panneau envoyé dans {channel.mention}.",
+        f"✅ Le panneau de tickets a été envoyé "
+        f"dans {channel.mention} !",
 
         ephemeral=True
     )
 
 
-@ticketpanel_command.error
-async def ticketpanel_command_error(
-    interaction: discord.Interaction,
-    error
-):
-
-    if isinstance(
-        error,
-        app_commands.errors.MissingPermissions
-    ):
-
-        await interaction.response.send_message(
-
-            "❌ Tu dois être administrateur.",
-
-            ephemeral=True
-        )
-
-
 # =========================================================
-# ARRIVÉE D'UN MEMBRE
+# BIENVENUE + RÔLE CIVILS
 # =========================================================
 
 @bot.event
-async def on_member_join(member):
+async def on_member_join(
+
+    member: discord.Member
+):
 
     guild = member.guild
 
     # -----------------------------------------------------
-    # ROLE CIVILS
+    # DONNER LE RÔLE ・Civils
     # -----------------------------------------------------
 
     civils_role = discord.utils.get(
+
         guild.roles,
+
         name="・Civils"
     )
 
-    if civils_role:
+    if civils_role is None:
+
+        print(
+            "❌ Le rôle ・Civils n'existe pas."
+        )
+
+    else:
 
         try:
 
@@ -1575,140 +1094,273 @@ async def on_member_join(member):
 
                 civils_role,
 
-                reason="Attribution automatique du rôle Civil"
+                reason=(
+                    "Attribution automatique "
+                    "du rôle à l'arrivée"
+                )
             )
 
             print(
-                f"✅ Rôle ・Civils donné à {member}."
+
+                f"👤 Rôle ・Civils donné à "
+                f"{member}"
+            )
+
+        except discord.Forbidden:
+
+            print(
+
+                "❌ Impossible de donner le rôle "
+                "・Civils."
+            )
+
+            print(
+
+                "Vérifie que le rôle du bot est "
+                "au-dessus du rôle ・Civils."
             )
 
         except Exception as error:
 
             print(
-                f"❌ Impossible de donner ・Civils : {error}"
+
+                f"❌ Erreur attribution rôle : "
+                f"{error}"
             )
 
-    else:
-
-        print(
-            "⚠️ Rôle ・Civils introuvable."
-        )
-
     # -----------------------------------------------------
-    # BIENVENUE
+    # RÉCUPÉRER CONFIG BIENVENUE
     # -----------------------------------------------------
 
-    guild_config = get_guild_config(
+    guild_id = str(
         guild.id
     )
 
+    guild_config = config.get(
+
+        guild_id,
+
+        {}
+    )
+
     welcome_channel_id = guild_config.get(
+
         "welcome_channel"
     )
 
+    # -----------------------------------------------------
+    # Aucun salon configuré
+    # -----------------------------------------------------
+
     if not welcome_channel_id:
+
+        print(
+
+            f"ℹ️ Aucun salon de bienvenue "
+            f"configuré pour {guild.name}"
+        )
+
         return
+
+    # -----------------------------------------------------
+    # Récupérer le salon
+    # -----------------------------------------------------
 
     channel = guild.get_channel(
-        int(welcome_channel_id)
+
+        welcome_channel_id
     )
 
-    if not channel:
+    if channel is None:
+
+        print(
+
+            "❌ Le salon de bienvenue "
+            "n'existe plus."
+        )
+
         return
+
+    # -----------------------------------------------------
+    # MESSAGE DE BIENVENUE
+    # -----------------------------------------------------
 
     embed = discord.Embed(
 
         title="👋 Bienvenue !",
 
         description=(
+
             f"Bienvenue {member.mention} sur "
-            f"**{guild.name}** !\n\n"
+            f"**SouthLife Rôle-Play** !\n\n"
 
             "Nous sommes heureux de t'accueillir "
             "parmi nous.\n\n"
 
-            "Amuse-toi bien sur SouthLife Rôle-Play !"
+            "🌴 **Bon jeu à toi !**"
         ),
 
-        color=discord.Color.green()
+        color=discord.Color.blurple()
     )
 
+    # Avatar du nouveau membre
     embed.set_thumbnail(
+
         url=member.display_avatar.url
     )
 
+    # Nombre de membres
     embed.set_footer(
-        text=f"Membre n°{guild.member_count}"
+
+        text=(
+
+            f"Nous sommes maintenant "
+            f"{guild.member_count} membres !"
+        )
     )
 
     try:
 
         await channel.send(
+
             embed=embed
         )
 
-    except Exception as error:
+        print(
+
+            f"👋 Message de bienvenue envoyé "
+            f"pour {member}"
+        )
+
+    except discord.Forbidden:
 
         print(
-            f"❌ Erreur bienvenue : {error}"
+
+            "❌ Le bot n'a pas la permission "
+            "d'envoyer des messages dans "
+            "le salon de bienvenue."
         )
 
 
 # =========================================================
-# MESSAGES
+# ERREUR /CONFIG
 # =========================================================
 
-@bot.event
-async def on_message(message):
+@config_command.error
+async def config_command_error(
 
-    # Ignorer les bots
-    if message.author.bot:
-        return
+    interaction: discord.Interaction,
 
-    # IA uniquement dans les tickets
-    if (
-        message.guild
-        and is_ticket_channel(message.channel)
+    error
+):
+
+    if isinstance(
+
+        error,
+
+        app_commands.errors.MissingPermissions
     ):
 
-        await send_ai_response(
-            message
+        await interaction.response.send_message(
+
+            "❌ Tu dois être administrateur "
+            "pour utiliser cette commande.",
+
+            ephemeral=True
         )
 
-    await bot.process_commands(
-        message
-    )
+    else:
+
+        print(
+            f"❌ Erreur /config : {error}"
+        )
+
+        if not interaction.response.is_done():
+
+            await interaction.response.send_message(
+
+                "❌ Une erreur est survenue.",
+
+                ephemeral=True
+            )
 
 
 # =========================================================
-# READY
+# ERREUR /TICKETPANEL
+# =========================================================
+
+@ticketpanel.error
+async def ticketpanel_error(
+
+    interaction: discord.Interaction,
+
+    error
+):
+
+    if isinstance(
+
+        error,
+
+        app_commands.errors.MissingPermissions
+    ):
+
+        await interaction.response.send_message(
+
+            "❌ Tu dois être administrateur "
+            "pour utiliser cette commande.",
+
+            ephemeral=True
+        )
+
+    else:
+
+        print(
+            f"❌ Erreur /ticketpanel : {error}"
+        )
+
+        if not interaction.response.is_done():
+
+            await interaction.response.send_message(
+
+                "❌ Une erreur est survenue.",
+
+                ephemeral=True
+            )
+
+
+# =========================================================
+# BOT PRÊT
 # =========================================================
 
 @bot.event
 async def on_ready():
 
     print(
+
         f"✅ Connecté en tant que "
         f"{bot.user}"
     )
 
-    print(
-        "🎫 Système de tickets : OK"
-    )
+    try:
 
-    print(
-        "👋 Système de bienvenue : OK"
-    )
+        synced = await bot.tree.sync()
 
-    print(
-        "🤖 Assistant IA Hugging Face : OK"
-    )
+        print(
+
+            f"✅ {len(synced)} commande(s) synchronisée(s)"
+        )
+
+    except Exception as error:
+
+        print(
+
+            f"❌ Erreur de synchronisation : "
+            f"{error}"
+        )
 
 
 # =========================================================
 # LANCEMENT
 # =========================================================
 
-bot.run(
-    DISCORD_TOKEN
-)
+bot.run(TOKEN)
