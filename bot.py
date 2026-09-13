@@ -254,24 +254,26 @@ class CloseTicketView(discord.ui.View):
 # MENU CONFIGURATION BIENVENUE
 # ==========================================
 
-class WelcomeConfigView(discord.ui.View):
+# ==========================================
+# MENU CONFIGURATION BIENVENUE
+# ==========================================
+
+class WelcomeChannelSelect(discord.ui.ChannelSelect):
 
     def __init__(self):
-        super().__init__(timeout=300)
+        super().__init__(
+            placeholder="Choisis le salon de bienvenue",
+            channel_types=[discord.ChannelType.text],
+            min_values=1,
+            max_values=1
+        )
 
-    @discord.ui.channel_select(
-        placeholder="Choisis le salon de bienvenue",
-        channel_types=[discord.ChannelType.text],
-        min_values=1,
-        max_values=1
-    )
-    async def select_welcome_channel(
+    async def callback(
         self,
-        interaction: discord.Interaction,
-        select: discord.ui.ChannelSelect
+        interaction: discord.Interaction
     ):
 
-        channel = select.values[0]
+        channel = self.values[0]
 
         guild_id = str(
             interaction.guild.id
@@ -288,6 +290,16 @@ class WelcomeConfigView(discord.ui.View):
             f"✅ Le salon de bienvenue est maintenant "
             f"{channel.mention}.",
             ephemeral=True
+        )
+
+
+class WelcomeConfigView(discord.ui.View):
+
+    def __init__(self):
+        super().__init__(timeout=300)
+
+        self.add_item(
+            WelcomeChannelSelect()
         )
 
 
