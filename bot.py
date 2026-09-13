@@ -787,7 +787,7 @@ def create_reglement_embed():
 
     description = (
         "**Règlement des Serveurs**\n"
-        "**Discord Alya RP**\n\n"
+        "**Discord SouthLife RP**\n\n"
 
         "**1 -** Soyez respectueux avec tout le monde.\n\n"
 
