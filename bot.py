@@ -18,7 +18,7 @@ CONFIG_FILE = "config.json"
 
 
 # ==========================================
-# SAUVEGARDE DES CONFIGURATIONS
+# CONFIGURATION SAUVEGARDE
 # ==========================================
 
 def load_config():
@@ -44,7 +44,21 @@ config = load_config()
 intents = discord.Intents.default()
 intents.members = True
 
-bot = commands.Bot(
+
+# ==========================================
+# BOT
+# ==========================================
+
+class MyBot(commands.Bot):
+
+    async def setup_hook(self):
+
+        # Boutons persistants
+        self.add_view(TicketView())
+        self.add_view(CloseTicketView())
+
+
+bot = MyBot(
     command_prefix="!",
     intents=intents
 )
@@ -74,7 +88,7 @@ class TicketView(discord.ui.View):
         guild = interaction.guild
         member = interaction.user
 
-        # Vérifier les tickets existants
+        # Vérifier si un ticket existe déjà
         for channel in guild.text_channels:
 
             if channel.topic == f"ticket:{member.id}":
@@ -101,7 +115,7 @@ class TicketView(discord.ui.View):
 
             return
 
-        # Permissions
+        # Permissions du ticket
         overwrites = {
 
             guild.default_role:
@@ -118,7 +132,7 @@ class TicketView(discord.ui.View):
                 )
         }
 
-        # Rôle staff
+        # Rôle Staff
         staff_role = discord.utils.get(
             guild.roles,
             name=STAFF_ROLE
@@ -132,7 +146,7 @@ class TicketView(discord.ui.View):
                 read_message_history=True
             )
 
-        # Création du ticket
+        # Créer le salon
         channel = await guild.create_text_channel(
             name=f"ticket-{member.name}",
             category=category,
@@ -140,6 +154,7 @@ class TicketView(discord.ui.View):
             topic=f"ticket:{member.id}"
         )
 
+        # Embed du ticket
         embed = discord.Embed(
             title="🎫 Ticket ouvert",
             description=(
@@ -165,7 +180,7 @@ class TicketView(discord.ui.View):
 
 
 # ==========================================
-# FERMETURE DES TICKETS
+# FERMER UN TICKET
 # ==========================================
 
 class CloseTicketView(discord.ui.View):
@@ -188,6 +203,7 @@ class CloseTicketView(discord.ui.View):
         channel = interaction.channel
         guild = interaction.guild
 
+        # Vérifier que c'est un ticket
         if (
             not channel.topic
             or not channel.topic.startswith("ticket:")
@@ -204,6 +220,7 @@ class CloseTicketView(discord.ui.View):
             channel.topic.split(":")[1]
         )
 
+        # Récupérer le rôle Staff
         staff_role = discord.utils.get(
             guild.roles,
             name=STAFF_ROLE
@@ -216,6 +233,7 @@ class CloseTicketView(discord.ui.View):
             and staff_role in interaction.user.roles
         )
 
+        # Vérifier les permissions
         if not is_owner and not is_staff:
 
             await interaction.response.send_message(
@@ -233,7 +251,7 @@ class CloseTicketView(discord.ui.View):
 
 
 # ==========================================
-# CONFIGURATION DU BIENVENUE
+# MENU CONFIGURATION BIENVENUE
 # ==========================================
 
 class WelcomeConfigView(discord.ui.View):
@@ -255,7 +273,9 @@ class WelcomeConfigView(discord.ui.View):
 
         channel = select.values[0]
 
-        guild_id = str(interaction.guild.id)
+        guild_id = str(
+            interaction.guild.id
+        )
 
         if guild_id not in config:
             config[guild_id] = {}
@@ -265,13 +285,14 @@ class WelcomeConfigView(discord.ui.View):
         save_config(config)
 
         await interaction.response.send_message(
-            f"✅ Le salon de bienvenue est maintenant {channel.mention}.",
+            f"✅ Le salon de bienvenue est maintenant "
+            f"{channel.mention}.",
             ephemeral=True
         )
 
 
 # ==========================================
-# MENU CONFIGURATION
+# MENU /CONFIG
 # ==========================================
 
 class ConfigView(discord.ui.View):
@@ -321,12 +342,11 @@ class ConfigView(discord.ui.View):
         embed = discord.Embed(
             title="🎫 Configuration des tickets",
             description=(
-                f"Le système de tickets utilise actuellement :\n\n"
                 f"📁 Catégorie : `{TICKET_CATEGORY}`\n"
                 f"📞 Salon : `{TICKET_CHANNEL}`\n"
                 f"👮 Rôle staff : `{STAFF_ROLE}`\n\n"
-                "La configuration avancée des tickets sera ajoutée "
-                "dans une prochaine étape."
+                "La configuration avancée des tickets "
+                "pourra être ajoutée ensuite."
             ),
             color=discord.Color.blurple()
         )
@@ -357,7 +377,6 @@ async def config_command(
         description=(
             "**Bienvenue dans le panneau de configuration "
             "de SouthLife Rôle-Play.**\n\n"
-
             "Sélectionne une fonctionnalité ci-dessous "
             "pour la configurer."
         ),
@@ -384,7 +403,7 @@ async def config_command(
 
 
 # ==========================================
-# MESSAGE DE BIENVENUE
+# SYSTÈME DE BIENVENUE
 # ==========================================
 
 @bot.event
@@ -392,7 +411,9 @@ async def on_member_join(
     member: discord.Member
 ):
 
-    guild_id = str(member.guild.id)
+    guild_id = str(
+        member.guild.id
+    )
 
     guild_config = config.get(
         guild_id,
@@ -403,25 +424,30 @@ async def on_member_join(
         "welcome_channel"
     )
 
+    # Aucun salon configuré
     if not channel_id:
+
         print(
-            f"ℹ️ Aucun salon de bienvenue configuré pour "
-            f"{member.guild.name}"
+            f"ℹ️ Aucun salon de bienvenue configuré "
+            f"pour {member.guild.name}"
         )
 
         return
 
+    # Récupérer le salon
     channel = member.guild.get_channel(
         channel_id
     )
 
     if channel is None:
+
         print(
             "❌ Le salon de bienvenue n'existe plus."
         )
 
         return
 
+    # Créer le message
     embed = discord.Embed(
         title="👋 Bienvenue !",
         description=(
@@ -437,12 +463,17 @@ async def on_member_join(
         color=discord.Color.blurple()
     )
 
+    # Photo de profil
     embed.set_thumbnail(
         url=member.display_avatar.url
     )
 
+    # Nombre de membres
     embed.set_footer(
-        text=f"Nous sommes maintenant {member.guild.member_count} membres !"
+        text=(
+            f"Nous sommes maintenant "
+            f"{member.guild.member_count} membres !"
+        )
     )
 
     try:
@@ -452,14 +483,14 @@ async def on_member_join(
         )
 
         print(
-            f"👋 Message de bienvenue envoyé pour {member}"
+            f"👋 Bienvenue envoyé pour {member}"
         )
 
     except discord.Forbidden:
 
         print(
-            "❌ Le bot n'a pas la permission d'envoyer "
-            "des messages dans le salon de bienvenue."
+            "❌ Le bot n'a pas la permission "
+            "d'envoyer des messages."
         )
 
 
@@ -487,24 +518,6 @@ async def on_ready():
         print(
             f"❌ Erreur de synchronisation : {error}"
         )
-
-
-# ==========================================
-# ENREGISTRER LES BOUTONS PERSISTANTS
-# ==========================================
-
-async def setup_hook():
-
-    bot.add_view(
-        TicketView()
-    )
-
-    bot.add_view(
-        CloseTicketView()
-    )
-
-
-bot.setup_hook = setup_hook
 
 
 # ==========================================
