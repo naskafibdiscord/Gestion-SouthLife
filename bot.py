@@ -636,7 +636,7 @@ def create_reglement_embed():
     )
 
     if REGLEMENT_IMAGE_URL:
-        embed.set_image(https://cdn.discordapp.com/attachments/1547338843198324772/1548644935203561552/image.jpg?ex=6aa7cf7c&is=6aa67dfc&hm=2d4be46fb29c02b579285d43946c999799addad87f615b93a3376c665857da12&)
+        embed.set_image(url="https://cdn.discordapp.com/attachments/1547338843198324772/1548644935203561552/image.jpg?ex=6aa7cf7c&is=6aa67dfc&hm=2d4be46fb29c02b579285d43946c999799addad87f615b93a3376c665857da12&")
 
     embed.set_footer(
         text="Discord Alya RP • Merci de respecter le règlement."
